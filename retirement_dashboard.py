@@ -20,12 +20,12 @@ with col_input:
     
     with st.expander("📅 日期與年資設定", expanded=True):
         today_date = st.date_input("今天日期", datetime.date(2026, 7, 4))
-        birth_date = st.date_input("出生日期", datetime.date(1975, 8, 12))
-        start_work_date = st.date_input("開始工作", datetime.date(2006, 3, 17))
+        birth_date = st.date_input("出生日期", datetime.date(1990, 1, ))
+        start_work_date = st.date_input("開始工作", datetime.date(2016, 1, 1))
         
-        military_months = st.number_input("當兵年資(月)", value=23, step=1)
+        military_months = st.number_input("當兵年資(月)", value=0, step=1)
         exclude_months = st.number_input("不計年資(月)", value=0, step=1)
-        retire_age = st.number_input("退休年齡(歲)", value=55, step=1)
+        retire_age = st.number_input("退休年齡(歲)", value=60, step=1)
         
         # 自動推算退休日期與相關年資
         retire_year = birth_date.year + retire_age

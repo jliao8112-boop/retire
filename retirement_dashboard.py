@@ -20,7 +20,7 @@ with col_input:
     
     with st.expander("📅 日期與年資設定", expanded=True):
         today_date = st.date_input("今天日期", datetime.date(2026, 7, 4))
-        birth_date = st.date_input("出生日期", datetime.date(1990, 1, ))
+        birth_date = st.date_input("出生日期", datetime.date(1990, 1, 1))
         start_work_date = st.date_input("開始工作", datetime.date(2016, 1, 1))
         
         military_months = st.number_input("當兵年資(月)", value=0, step=1)

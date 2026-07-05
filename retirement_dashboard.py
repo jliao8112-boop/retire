@@ -61,7 +61,7 @@ start_work_date = st.date_input("開始工作日期", datetime.date(2010, 1, 1))
 # 第二列輸入 (年資與退休年齡)
 col3, col4, col5 = st.columns(3)
 with col3:
-    military_months = st.number_input("當兵年資 (月)", value=23, min_value=0, step=1)
+    military_months = st.number_input("當兵年資 (月)", value=0, min_value=0, step=1)
 with col4:
     exclude_months = st.number_input("不計年資 (月)", value=0, min_value=0, step=1)
 with col5:

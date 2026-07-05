@@ -72,7 +72,7 @@ col6, col7 = st.columns(2)
 with col6:
     principal = st.number_input("初始本金 (元)", value=3600000, step=100000)
 with col7:
-    annual_contribution = st.number_input("每年投入金額 (元)", value=200000, step=10000)
+    annual_contribution = st.number_input("每年投入金額 (元)", value=360000, step=10000)
 
 # 第四列輸入 (比率滑桿)
 col8, col9, col10 = st.columns(3)

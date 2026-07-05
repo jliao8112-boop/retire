@@ -54,9 +54,9 @@ col1, col2 = st.columns(2)
 with col1:
     today_date = st.date_input("今天日期", datetime.date(2026, 7, 5))
 with col2:
-    birth_date = st.date_input("出生日期", datetime.date(1975, 8, 12), min_value=datetime.date(1965, 1, 1), max_value=datetime.date(2065, 12, 31))
+    birth_date = st.date_input("出生日期", datetime.date(1984, 1, 1), min_value=datetime.date(1965, 1, 1), max_value=datetime.date(2065, 12, 31))
 
-start_work_date = st.date_input("開始工作日期", datetime.date(2006, 3, 17))
+start_work_date = st.date_input("開始工作日期", datetime.date(2010, 1, 1))
 
 # 第二列輸入 (年資與退休年齡)
 col3, col4, col5 = st.columns(3)
@@ -70,7 +70,7 @@ with col5:
 # 第三列輸入 (資金)
 col6, col7 = st.columns(2)
 with col6:
-    principal = st.number_input("初始本金 (元)", value=10000000, step=100000)
+    principal = st.number_input("初始本金 (元)", value=1000000, step=100000)
 with col7:
     annual_contribution = st.number_input("每年投入金額 (元)", value=200000, step=10000)
 

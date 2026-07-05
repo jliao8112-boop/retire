@@ -65,7 +65,7 @@ with col3:
 with col4:
     exclude_months = st.number_input("不計年資 (月)", value=0, min_value=0, step=1)
 with col5:
-    retire_age = st.number_input("退休年齡 (歲)", value=55, min_value=1, max_value=100, step=1)
+    retire_age = st.number_input("退休年齡 (歲)", value=60, min_value=1, max_value=100, step=1)
 
 # 第三列輸入 (資金)
 col6, col7 = st.columns(2)

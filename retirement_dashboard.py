@@ -12,13 +12,17 @@ st.markdown("""
 <style>
     /* 漸層數據卡片樣式 */
     .metric-card {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #f1f3f5 100%);
         border-radius: 12px;
         padding: 20px 15px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         text-align: center;
         border-top: 4px solid #8CB35A;
         margin-bottom: 25px;
+        transition: transform 0.2s;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
     }
     .metric-label {
         font-size: 1.1rem;
@@ -41,14 +45,14 @@ st.title("ETF資產與退休提領的財務自由模擬面板")
 st.write("---")
 
 # ==========================================
-# 2. 參數輸入區 (參考圖片的簡潔網格佈局)
+# 2. 參數輸入區 (簡潔網格佈局)
 # ==========================================
 st.subheader("⚙️ 參數設定區")
 
 # 第一列輸入 (日期)
 col1, col2 = st.columns(2)
 with col1:
-    today_date = st.date_input("今天日期", datetime.date.today())
+    today_date = st.date_input("今天日期", datetime.date(2026, 7, 5))
 with col2:
     birth_date = st.date_input("出生日期", datetime.date(1975, 8, 12), min_value=datetime.date(1965, 1, 1), max_value=datetime.date(2065, 12, 31))
 
@@ -82,9 +86,9 @@ with col10:
 st.write("---")
 
 # ==========================================
-# 3. 核心運算邏輯 (絕對年份差值複利法)
+# 3. 核心運算邏輯 (包含 -1 年校正)
 # ==========================================
-# 處理日期與年資推算
+# 推算退休日期
 retire_year = birth_date.year + retire_age
 try:
     retire_date = datetime.date(retire_year, birth_date.month, birth_date.day)
@@ -98,9 +102,10 @@ base_work_months = (retire_date.year - start_work_date.year) * 12 + (retire_date
 total_net_months = max(0, base_work_months + military_months - exclude_months)
 retire_tenure_years = total_net_months / 12
 
-# 退休啟動本金計算 (嚴格依據年份差值進行迴圈)
+# 【核心修正】退休啟動本金計算 (實務保留最後一年彈性，迴圈次數 = 距離年數 - 1)
+calc_periods = max(0, years_to_retire - 1)
 accumulated_value = principal
-for _ in range(years_to_retire):
+for _ in range(calc_periods):
     accumulated_value = accumulated_value * (1 + expected_return_rate) + annual_contribution
 retire_starting_principal = int(accumulated_value)
 
@@ -189,7 +194,7 @@ fig = px.line(
     y="期末資產結餘", 
     template="plotly_white"
 )
-fig.update_traces(line=dict(color="#8CB35A", width=4), mode='lines') # 移除點，保持平滑
+fig.update_traces(line=dict(color="#8CB35A", width=4), mode='lines')
 fig.update_layout(
     yaxis_title="資產結餘 (TWD)",
     xaxis_title="觀測年度 (西元)",

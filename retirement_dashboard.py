@@ -70,7 +70,7 @@ with col5:
 # 第三列輸入 (資金)
 col6, col7 = st.columns(2)
 with col6:
-    principal = st.number_input("初始本金 (元)", value=1000000, step=100000)
+    principal = st.number_input("初始本金 (元)", value=3600000, step=100000)
 with col7:
     annual_contribution = st.number_input("每年投入金額 (元)", value=200000, step=10000)
 

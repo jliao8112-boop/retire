@@ -63,7 +63,7 @@ with st.sidebar:
     with st.expander("📅 日期與年資設定", expanded=True):
         today_date = st.date_input("今天日期", datetime.date(2026, 7, 5))
         birth_date = st.date_input("出生日期", datetime.date(1984, 1, 1), min_value=datetime.date(1965, 1, 1), max_value=datetime.date(2065, 12, 31))
-        start_work_date = st.date_input("開始工作日期", datetime.date(2010, 1, 1))
+        start_work_date = st.date_input("開始工作日期", datetime.date(2010, 1, 1), min_value=datetime.date(1980, 1, 1), max_value=datetime.date(2080, 12, 31))
         
         col_s1, col_s2 = st.columns(2)
         with col_s1:

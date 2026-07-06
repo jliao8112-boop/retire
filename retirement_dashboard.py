@@ -51,7 +51,7 @@ default_values = {
     "cash_assets": 500000,
     "real_estate_value": 12000000,
     "total_debt": 2500000,
-    "user_principal": 2000000,  # 已修正為 2,000,000
+    "user_principal": 2000000,
     "user_annual_contribution": 120000,
     "user_years_to_retire": 9,
     "user_monthly_pension": 35000,
@@ -61,7 +61,11 @@ default_values = {
     "spouse_monthly_pension": 35000,
     "expected_return_pct": 7.0,
     "post_retire_expense": 75000,
-    "inflation_pct": 2.0
+    "inflation_pct": 2.0,
+    "child_age": 10,
+    "college_start_age": 18,
+    "college_years": 4,
+    "annual_college_cost": 250000
 }
 
 key_mapping = {
@@ -71,7 +75,8 @@ key_mapping = {
     "主力_距離退休年數": "user_years_to_retire", "主力_預估月退俸": "user_monthly_pension",
     "配偶_初始本金": "spouse_principal", "配偶_每年投入金額": "spouse_annual_contribution", 
     "配偶_距離退休年數": "spouse_years_to_retire", "配偶_預估月退俸": "spouse_monthly_pension",
-    "預期年化報酬率(%)": "expected_return_pct", "預估退休後每月支出": "post_retire_expense", "預估年通膨率(%)": "inflation_pct"
+    "預期年化報酬率(%)": "expected_return_pct", "預估退休後每月支出": "post_retire_expense", "預估年通膨率(%)": "inflation_pct",
+    "子女目前年齡": "child_age", "預計就讀大學年齡": "college_start_age", "預計就讀年數": "college_years", "預估大學每年總花費": "annual_college_cost"
 }
 
 for key, val in default_values.items():
@@ -105,10 +110,16 @@ with st.sidebar:
     with st.expander(f"💼 {prefix}收支與資產現況", expanded=False):
         annual_income = st.number_input(f"{prefix}年總收入 (元)", value=st.session_state["annual_income"], step=50000, key="annual_income")
         annual_expense = st.number_input(f"{prefix}年總支出 (元)", value=st.session_state["annual_expense"], step=50000, key="annual_expense")
-        annual_debt_pay = st.number_input("年固定還款總額 (元)", value=st.session_state["annual_debt_pay"], step=10000, key="annual_debt_pay")
+        annual_debt_pay = st.number_input("年固定還款總額 (如本金平均攤還) (元)", value=st.session_state["annual_debt_pay"], step=10000, key="annual_debt_pay")
         cash_assets = st.number_input("高流動現金存款 (元)", value=st.session_state["cash_assets"], step=50000, key="cash_assets")
         real_estate_value = st.number_input("不動產現值 (元)", value=st.session_state["real_estate_value"], step=500000, key="real_estate_value")
         total_debt = st.number_input("總負債餘額 (元)", value=st.session_state["total_debt"], step=100000, key="total_debt")
+
+    with st.expander("🎓 子女教育經費預算", expanded=True):
+        child_age = st.number_input("子女目前年齡 (歲)", value=st.session_state["child_age"], step=1, key="child_age")
+        college_start_age = st.number_input("預計就讀大學年齡 (歲)", value=st.session_state["college_start_age"], step=1, key="college_start_age")
+        college_years = st.number_input("預計就讀年數 (年)", value=st.session_state["college_years"], step=1, key="college_years")
+        annual_college_cost = st.number_input("大學每年總花費 (元/年)", value=st.session_state["annual_college_cost"], step=10000, key="annual_college_cost", help="含學雜費、住宿與生活費。全台公私立大學生年開銷中位數約落在 25 萬上下。")
 
     with st.expander("👨 主力：財務規劃與模擬", expanded=True):
         user_principal = st.number_input("初始本金 (元)", value=st.session_state["user_principal"], step=50000, key="user_principal")
@@ -123,10 +134,7 @@ with st.sidebar:
             spouse_years_to_retire = st.slider("配偶_距離退休尚有幾年？", 0, 40, st.session_state["spouse_years_to_retire"], key="spouse_years_to_retire")
             spouse_monthly_pension = st.number_input("配偶_預估月退俸 (元)", value=st.session_state["spouse_monthly_pension"], step=5000, key="spouse_monthly_pension")
     else:
-        spouse_principal = 0
-        spouse_annual_contribution = 0
-        spouse_years_to_retire = 0
-        spouse_monthly_pension = 0
+        spouse_principal = 0; spouse_annual_contribution = 0; spouse_years_to_retire = 0; spouse_monthly_pension = 0
         
     with st.expander("📈 總體經濟參數", expanded=True):
         expected_return_pct = st.slider("預期年化報酬率 (%)", 0.0, 20.0, st.session_state["expected_return_pct"], 0.1, key="expected_return_pct")
@@ -202,7 +210,7 @@ with tab1:
 
     st.markdown("### 🧭 演算法戰略診斷報告")
     
-    if pre_retire_fi_rate >= 100: pre_strat = "<b>完全財務自由：</b>當下的資產孳息已超越目前開銷。現階段的工作純屬個人選擇，可開始提高生活品質。"
+    if pre_retire_fi_rate >= 100: pre_strat = "<b>完全財務自由：</b>當下的資產孳息已超越目前開銷。現階段的工作純屬個人選擇，可大膽尋找市場甜甜價，開始提高生活品質。"
     elif pre_retire_fi_rate >= 50: pre_strat = "<b>具備半退休底氣：</b>資產已具備強大防禦力。請保持年度投入紀律，避免盲目擴張消費，耐心等待資產複利增長。"
     else: pre_strat = "<b>高度依賴主動收入：</b>目前資產孳息不足以支撐現有生活。首要任務是保住本業收入，透過提高「淨儲蓄率」加大投入力道。"
 
@@ -228,8 +236,6 @@ with tab2:
     for i in range(1, 51):
         year_label = current_year + i
         user_retired = i > user_years_to_retire
-        
-        # 🟢 【重大修正點】幽靈配偶 Bug 修復：單身模式下，配偶永遠不會處於退休狀態
         spouse_retired = (i > spouse_years_to_retire) if family_status == "已婚/雙薪" else False
         
         inv_income_u = int(asset_u * expected_return) if asset_u > 0 else 0
@@ -244,20 +250,45 @@ with tab2:
         
         if i > 1: current_annual_expense = int(current_annual_expense * (1 + inflation))
             
-        shortfall = max(0, current_annual_expense - total_pension_received) if (user_retired or spouse_retired) else 0
+        # 計算當年度教育經費 (含通膨)
+        child_age_this_year = child_age + i
+        if college_start_age <= child_age_this_year < college_start_age + college_years:
+            edu_expense_this_year = int(annual_college_cost * ((1 + inflation) ** i))
+        else:
+            edu_expense_this_year = 0
             
+        base_shortfall = max(0, current_annual_expense - total_pension_received) if (user_retired or spouse_retired) else 0
+        total_shortfall_needed = base_shortfall + edu_expense_this_year
+        
+        # 教育費與生活缺口優先由當年度的原定投入閒錢 (Contribution) 吸收
+        if total_shortfall_needed > 0:
+            if cont_u >= total_shortfall_needed:
+                cont_u -= total_shortfall_needed
+                total_shortfall_needed = 0
+            elif (cont_u + cont_s) >= total_shortfall_needed:
+                total_shortfall_needed -= cont_u
+                cont_u = 0
+                cont_s -= total_shortfall_needed
+                total_shortfall_needed = 0
+            else:
+                total_shortfall_needed -= (cont_u + cont_s)
+                cont_u = 0
+                cont_s = 0
+                
+        actual_withdrawal = total_shortfall_needed
+        
         asset_u = asset_u + inv_income_u + cont_u
         asset_s = asset_s + inv_income_s + cont_s
         
-        actual_withdrawal = shortfall
-        if shortfall > 0:
-            if asset_u >= shortfall: asset_u -= shortfall
+        # 若仍有缺口，則實質從 ETF 本金池提領
+        if actual_withdrawal > 0:
+            if asset_u >= actual_withdrawal: asset_u -= actual_withdrawal
             else:
-                shortfall -= asset_u; asset_u = 0; asset_s -= shortfall
+                actual_withdrawal -= asset_u; asset_u = 0; asset_s -= actual_withdrawal
                 if asset_s < 0: asset_s = 0
                     
         total_family_asset = asset_u + asset_s
-        if total_family_asset <= 0 and bankrupt_year is None and (user_retired or spouse_retired):
+        if total_family_asset <= 0 and bankrupt_year is None and (user_retired or spouse_retired or edu_expense_this_year > 0):
             bankrupt_year = year_label
             
         row_data = {
@@ -266,7 +297,8 @@ with tab2:
             "總流動資產": int(total_family_asset),
             "年度總月退俸": int(total_pension_received),
             "通膨後預估支出": int(current_annual_expense) if (user_retired or spouse_retired) else 0,
-            "從資產提領金額": int(actual_withdrawal)
+            "該年教育支出": int(edu_expense_this_year),
+            "從資產提領金額": int(total_shortfall_needed)
         }
         if family_status == "已婚/雙薪": row_data["配偶資金結餘"] = int(asset_s)
         sim_rows.append(row_data)

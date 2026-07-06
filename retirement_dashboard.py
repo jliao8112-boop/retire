@@ -51,7 +51,7 @@ default_values = {
     "cash_assets": 500000,
     "real_estate_value": 12000000,
     "total_debt": 2500000,
-    "user_principal": 2000000,
+    "user_principal": 2000000,  # 已修正為 2,000,000
     "user_annual_contribution": 120000,
     "user_years_to_retire": 9,
     "user_monthly_pension": 35000,
@@ -98,7 +98,6 @@ with st.sidebar:
     st.write("---")
     st.header("⚙️ 財務參數輸入")
     
-    # 🆕 動態狀態切換
     family_status = st.radio("選擇財務規劃模式", ["已婚/雙薪", "單身"], index=0 if st.session_state["family_status"] == "已婚/雙薪" else 1, horizontal=True)
     st.session_state["family_status"] = family_status
     prefix = "家庭" if family_status == "已婚/雙薪" else "個人"
@@ -117,7 +116,6 @@ with st.sidebar:
         user_years_to_retire = st.slider("距離退休尚有幾年？", 0, 40, st.session_state["user_years_to_retire"], key="user_years_to_retire")
         user_monthly_pension = st.number_input("預估月退俸 (元)", value=st.session_state["user_monthly_pension"], step=5000, key="user_monthly_pension")
 
-    # 🆕 動態隱藏配偶欄位
     if family_status == "已婚/雙薪":
         with st.expander("👩 配偶：財務規劃與模擬", expanded=True):
             spouse_principal = st.number_input("配偶_初始本金 (元)", value=st.session_state["spouse_principal"], step=50000, key="spouse_principal")
@@ -169,7 +167,6 @@ future_passive_income = (total_future_assets * expected_return) / 12
 total_future_pension = user_monthly_pension + spouse_monthly_pension
 post_retire_fi_rate = ((total_future_pension + future_passive_income) / post_retire_expense) * 100 if post_retire_expense > 0 else 0
 
-# 🆕 單身模式的安全標準更嚴格
 safe_em_months = 6 if family_status == "已婚/雙薪" else 9
 warn_em_months = 3 if family_status == "已婚/雙薪" else 6
 
@@ -203,9 +200,6 @@ with tab1:
 
     c6.markdown(f'<div class="metric-card" style="border-top-color:#457b9d;"><div class="metric-label">預估退休時總流動資產</div><div class="metric-value">{int(total_future_assets):,} <span style="font-size:1.1rem;">元</span></div><div style="font-size:0.9rem; color:#888;">(邁入退休年份時之預估值)</div></div>', unsafe_allow_html=True)
 
-    # ------------------------------------------
-    # 動態戰略建議生成
-    # ------------------------------------------
     st.markdown("### 🧭 演算法戰略診斷報告")
     
     if pre_retire_fi_rate >= 100: pre_strat = "<b>完全財務自由：</b>當下的資產孳息已超越目前開銷。現階段的工作純屬個人選擇，可開始提高生活品質。"
@@ -234,7 +228,9 @@ with tab2:
     for i in range(1, 51):
         year_label = current_year + i
         user_retired = i > user_years_to_retire
-        spouse_retired = (i > spouse_years_to_retire) if family_status == "已婚/雙薪" else True
+        
+        # 🟢 【重大修正點】幽靈配偶 Bug 修復：單身模式下，配偶永遠不會處於退休狀態
+        spouse_retired = (i > spouse_years_to_retire) if family_status == "已婚/雙薪" else False
         
         inv_income_u = int(asset_u * expected_return) if asset_u > 0 else 0
         inv_income_s = int(asset_s * expected_return) if asset_s > 0 else 0
@@ -277,7 +273,6 @@ with tab2:
 
     df_sim = pd.DataFrame(sim_rows)
     
-    # 🆕 破產危機指南 (僅在出現破產年時顯示)
     if bankrupt_year:
         st.markdown(f"""
         <div class="strategy-box alert-box">

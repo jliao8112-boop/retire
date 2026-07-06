@@ -51,7 +51,7 @@ with st.sidebar:
         
     with st.expander("🏦 資產與負債盤點", expanded=True):
         cash_assets = st.number_input("高流動性現金存款 (元)", value=1000000, step=50000)
-        invest_assets = st.number_input("目前金融投資資產 (股票/ETF) (元)", value=9000000, step=100000)
+        invest_assets = st.number_input("目前金融投資資產 (股票/ETF) (元)", value=3000000, step=100000)
         real_estate_value = st.number_input("不動產現值 (自住+投資) (元)", value=15000000, step=500000)
         total_debt = st.number_input("總負債餘額 (房貸+信貸+車貸) (元)", value=1600000, step=100000)
         

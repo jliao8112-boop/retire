@@ -51,7 +51,7 @@ default_values = {
     "cash_assets": 500000,
     "real_estate_value": 12000000,
     "total_debt": 2500000,
-    "user_principal": 10000000,
+    "user_principal": 2000000,
     "user_annual_contribution": 120000,
     "user_years_to_retire": 9,
     "user_monthly_pension": 35000,

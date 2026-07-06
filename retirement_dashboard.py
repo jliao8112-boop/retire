@@ -157,11 +157,11 @@ with tab1:
         st.markdown(f'<div class="metric-card"><div class="metric-label">負債資產比</div><div class="metric-value">{debt_ratio:.1f} <span style="font-size:1.1rem;">%</span></div><div class="metric-label {db_color}">{db_status}</div></div>', unsafe_allow_html=True)
 
     if freedom_rate >= 100:
-        fr_status, fr_color = "1. 完全財務自由", "status-excellent"
+        fr_status, fr_color = "完全財務自由", "status-excellent"
     elif freedom_rate >= 50:
-        fr_status, fr_color = "2. 具備半退休底氣", "status-warning"
+        fr_status, fr_color = "具備半退休底氣", "status-warning"
     else:
-        fr_status, fr_color = "3. 需高度依賴主動收入", "status-danger"
+        fr_status, fr_color = "需高度依賴主動收入", "status-danger"
     with c4:
         st.markdown(f'<div class="metric-card"><div class="metric-label">預估財務自由度</div><div class="metric-value">{freedom_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div class="metric-label {fr_color}">{fr_status}</div></div>', unsafe_allow_html=True)
 

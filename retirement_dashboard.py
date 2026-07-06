@@ -45,7 +45,7 @@ with st.sidebar:
     st.header("⚙️ 家庭財務參數輸入")
     
     with st.expander("💼 家庭收支現況 (年計)", expanded=True):
-        annual_income = st.number_input("家庭年總收入 (元)", value=1900000, step=50000)
+        annual_income = st.number_input("家庭年總收入 (元)", value=1200000, step=50000)
         annual_expense = st.number_input("家庭年總支出 (含食衣住行育樂) (元)", value=900000, step=50000)
         annual_debt_pay = st.number_input("年固定還款總額 (房貸/車貸) (元)", value=320000, step=10000)
         

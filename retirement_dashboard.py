@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # ==========================================
-# 1. 網頁全域設定與自訂 CSS
+# 1. 網頁全域設定與自訂 CSS (優化版面間距與行距)
 # ==========================================
 st.set_page_config(page_title="通用版個人/家庭財務戰情中心", layout="wide", page_icon="🏦")
 
@@ -14,29 +14,35 @@ st.markdown("""
     .metric-card {
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
         border-radius: 12px;
-        padding: 20px 15px;
+        padding: 25px 20px; /* 加大內邊距 */
         box-shadow: 0 4px 15px rgba(0,0,0,0.03);
         text-align: center;
         border-top: 4px solid #457b9d;
-        margin-bottom: 20px;
+        margin-bottom: 25px; /* 加大底部外邊距 */
     }
-    .metric-label { font-size: 1.05rem; color: #6c757d; font-weight: 600; margin-bottom: 8px; }
-    .metric-value { font-size: clamp(1.4rem, 2vw, 1.8rem); font-weight: 700; color: #1d3557; }
+    .metric-label { font-size: 1.1rem; color: #6c757d; font-weight: 600; margin-bottom: 12px; }
+    .metric-value { font-size: clamp(1.5rem, 2.5vw, 2rem); font-weight: 700; color: #1d3557; }
     .status-excellent { color: #2a9d8f !important; font-weight: bold; }
     .status-warning { color: #e9c46a !important; font-weight: bold; }
     .status-danger { color: #e63946 !important; font-weight: bold; }
+    
     .strategy-box {
-        padding: 22px;
+        padding: 25px 30px; /* 加大內邊距 */
         border-radius: 12px;
         background-color: #f8f9fa;
         border-left: 6px solid #457b9d;
-        margin-bottom: 20px;
+        margin-top: 15px;
+        margin-bottom: 25px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
-    .strategy-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; color: #1d3557;}
-    .strategy-text { font-size: 1.05rem; line-height: 1.6; color: #495057; }
+    .strategy-title { font-size: 1.35rem; font-weight: 700; margin-bottom: 15px; color: #1d3557;}
+    .strategy-text { font-size: 1.1rem; line-height: 1.8; color: #495057; } /* 提高行距，避免字體擠在一起 */
+    
     .alert-box { background-color: #fff3f3; border-left: 6px solid #e63946; }
-    .alert-title { color: #e63946; font-weight: bold; font-size: 1.2rem; margin-bottom: 10px; }
+    .alert-title { color: #e63946; font-weight: bold; font-size: 1.25rem; margin-bottom: 12px; }
+    
+    /* 調整 Expander 標題大小與間距 */
+    .streamlit-expanderHeader { font-size: 1.1rem !important; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -78,16 +84,20 @@ for key, val in default_values.items():
 
 with st.sidebar:
     st.header("⚙️ 財務參數輸入")
+    st.write("") # 增加空白行
     
     planning_mode = st.radio("選擇財務規劃模式", ["雙人/家庭", "單人"], index=0 if st.session_state["planning_mode"] == "雙人/家庭" else 1, horizontal=True)
     st.session_state["planning_mode"] = planning_mode
     prefix = "家庭" if planning_mode == "雙人/家庭" else "個人"
+    st.write("")
 
     with st.expander(f"👥 扶養與收支現況 (主計處中位數參考)", expanded=False):
         dependent_children = st.number_input("扶養子女數 (人)", value=st.session_state["dependent_children"], step=1)
         dependent_elders = st.number_input("扶養長輩數 (人)", value=st.session_state["dependent_elders"], step=1)
+        st.divider()
         annual_income = st.number_input(f"{prefix}年總收入 (元)", value=st.session_state["annual_income"], step=50000)
         annual_expense = st.number_input(f"{prefix}年總基礎支出 (元)", value=st.session_state["annual_expense"], step=50000, help="不含貸款還款之基本生活開銷")
+        st.divider()
         cash_assets = st.number_input("高流動現金存款 (元)", value=st.session_state["cash_assets"], step=50000)
         real_estate_value = st.number_input("不動產現值 (元)", value=st.session_state["real_estate_value"], step=500000)
 
@@ -99,10 +109,11 @@ with st.sidebar:
     with st.expander("📌 自訂階段性重大支出 (選填)", expanded=True):
         st.caption("支援 3 筆重大支出 (如：購屋頭期款、長輩照護基金、子女大學學費)，將套用特殊專案通膨率計算。")
         for i in range(1, 4):
-            c1, c2, c3 = st.columns([2, 1, 1.5])
+            c1, c2, c3 = st.columns([2, 1, 1.5], gap="small")
             st.session_state[f"exp{i}_name"] = c1.text_input(f"支出 {i} 名稱", value=st.session_state[f"exp{i}_name"], key=f"name_{i}")
             st.session_state[f"exp{i}_year"] = c2.number_input("幾年後", value=st.session_state[f"exp{i}_year"], step=1, key=f"year_{i}")
             st.session_state[f"exp{i}_amount"] = c3.number_input("現值總額", value=st.session_state[f"exp{i}_amount"], step=50000, key=f"amt_{i}")
+            if i < 3: st.write("")
 
     with st.expander("👨 參與者 A：財務規劃與模擬", expanded=True):
         user_principal = st.number_input("初始本金 (元)", value=st.session_state["user_principal"], step=50000)
@@ -123,6 +134,7 @@ with st.sidebar:
         expected_return_pct = st.slider("預期年化報酬率 (%)", 0.0, 20.0, st.session_state["expected_return_pct"], 0.1)
         expected_return = expected_return_pct / 100
         post_retire_expense = st.number_input("預估退休後『每月』總支出 (元)", value=st.session_state["post_retire_expense"], step=5000)
+        st.divider()
         basic_inflation_pct = st.slider("基本生活通膨率 (%)", 0.0, 10.0, st.session_state["basic_inflation_pct"], 0.1)
         basic_inflation = basic_inflation_pct / 100
         special_inflation_pct = st.slider("特殊專案通膨率 (%)", 0.0, 15.0, st.session_state["special_inflation_pct"], 0.1, help="套用於自訂階段性重大支出 (如醫療、教育)")
@@ -134,16 +146,19 @@ with st.sidebar:
 def calculate_annual_debt_payment(principal, annual_rate, years, current_year_index):
     """計算本金平均攤還（本金利息一起還）特定年度的總現金流流出"""
     if years <= 0 or principal <= 0 or current_year_index >= years:
-        return 0, 0
+        return 0  # 修正：回傳單一數值 0，避免型別錯誤
+        
     monthly_rate = annual_rate / 100 / 12
     total_months = years * 12
     monthly_principal = principal / total_months
     start_month = current_year_index * 12
     annual_interest = 0
+    
     for m in range(start_month, start_month + 12):
         if m < total_months:
             remaining_principal = principal - (monthly_principal * m)
             annual_interest += remaining_principal * monthly_rate
+            
     annual_principal = monthly_principal * 12 if current_year_index < years else 0
     return annual_principal + annual_interest
 
@@ -179,14 +194,18 @@ warn_em_months = 3 if planning_mode == "雙人/家庭" else 6
 # 4. 主畫面：分頁架構
 # ==========================================
 st.title(f"🏦 通用版{prefix}財務戰情中心")
+st.write("")
+
 tab1, tab2 = st.tabs(["🏥 第一階段：財務體質與雙階段自由度", "🚀 第二階段：長期退休資產壓力測試"])
 
 with tab1:
+    st.write("")
     st.markdown("### 🛡️ 基礎防禦指標")
-    c1, c2, c3 = st.columns(3)
+    # 加入 gap="large" 讓卡片不要擠在一起
+    c1, c2, c3 = st.columns(3, gap="large") 
     
     em_color = "status-excellent" if emergency_months >= safe_em_months else ("status-warning" if emergency_months >= warn_em_months else "status-danger")
-    c1.markdown(f'<div class="metric-card"><div class="metric-label">緊急預備金</div><div class="metric-value {em_color}">{emergency_months:.1f} <span style="font-size:1.1rem;">個月</span></div><div style="font-size:0.85rem; color:#888;">{prefix}安全基準: {safe_em_months}個月</div></div>', unsafe_allow_html=True)
+    c1.markdown(f'<div class="metric-card"><div class="metric-label">緊急預備金</div><div class="metric-value {em_color}">{emergency_months:.1f} <span style="font-size:1.1rem;">個月</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">{prefix}安全基準: {safe_em_months}個月</div></div>', unsafe_allow_html=True)
 
     sv_color = "status-excellent" if savings_rate >= 30 else ("status-warning" if savings_rate >= 15 else "status-danger")
     c2.markdown(f'<div class="metric-card"><div class="metric-label">首年年度淨儲蓄率</div><div class="metric-value {sv_color}">{savings_rate:.1f} <span style="font-size:1.1rem;">%</span></div></div>', unsafe_allow_html=True)
@@ -194,12 +213,16 @@ with tab1:
     db_color = "status-excellent" if debt_ratio <= 30 else ("status-warning" if debt_ratio <= 60 else "status-danger")
     c3.markdown(f'<div class="metric-card"><div class="metric-label">負債資產比</div><div class="metric-value {db_color}">{debt_ratio:.1f} <span style="font-size:1.1rem;">%</span></div></div>', unsafe_allow_html=True)
 
-    st.markdown("### 🎯 雙階段財務獨立度評估")
-    c4, c5, c6 = st.columns(3)
+    st.divider()
     
-    c4.markdown(f'<div class="metric-card" style="border-top-color:#e9c46a;"><div class="metric-label">退休前財務獨立度</div><div class="metric-value" style="color:#e9c46a;">{pre_retire_fi_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div style="font-size:0.9rem; color:#888;">現有資產孳息覆蓋當下生活</div></div>', unsafe_allow_html=True)
-    c5.markdown(f'<div class="metric-card" style="border-top-color:#2a9d8f;"><div class="metric-label">退休後財務獨立度</div><div class="metric-value" style="color:#2a9d8f;">{post_retire_fi_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div style="font-size:0.9rem; color:#888;">被動總收入覆蓋退休生活</div></div>', unsafe_allow_html=True)
-    c6.markdown(f'<div class="metric-card" style="border-top-color:#457b9d;"><div class="metric-label">預估退休時總流動資產</div><div class="metric-value">{int(total_future_assets):,} <span style="font-size:1.1rem;">元</span></div><div style="font-size:0.9rem; color:#888;">(邁入退休年份時之預估值)</div></div>', unsafe_allow_html=True)
+    st.markdown("### 🎯 雙階段財務獨立度評估")
+    c4, c5, c6 = st.columns(3, gap="large")
+    
+    c4.markdown(f'<div class="metric-card" style="border-top-color:#e9c46a;"><div class="metric-label">退休前財務獨立度</div><div class="metric-value" style="color:#e9c46a;">{pre_retire_fi_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">現有資產孳息覆蓋當下生活</div></div>', unsafe_allow_html=True)
+    c5.markdown(f'<div class="metric-card" style="border-top-color:#2a9d8f;"><div class="metric-label">退休後財務獨立度</div><div class="metric-value" style="color:#2a9d8f;">{post_retire_fi_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">被動總收入覆蓋退休生活</div></div>', unsafe_allow_html=True)
+    c6.markdown(f'<div class="metric-card" style="border-top-color:#457b9d;"><div class="metric-label">預估退休時總流動資產</div><div class="metric-value">{int(total_future_assets):,} <span style="font-size:1.1rem;">元</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">(邁入退休年份時之預估值)</div></div>', unsafe_allow_html=True)
+
+    st.divider()
 
     st.markdown("### 🧭 演算法戰略診斷報告")
     
@@ -212,14 +235,21 @@ with tab1:
     else: post_strat = "<b>存在未來現金流缺口：</b>預估的被動收入不足以支撐退休生活。請務必拉長累積期，或在下方壓力測試區塊參考「危機應急指南」。"
 
     st.markdown(f"""
-    <div class="strategy-box" style="border-left-color: #e9c46a;"><div class="strategy-title">🏃‍♂️ 累積期 (現在) 操作策略</div><div class="strategy-text">{pre_strat}</div></div>
-    <div class="strategy-box" style="border-left-color: #2a9d8f;"><div class="strategy-title">🌴 提領期 (未來) 操作策略</div><div class="strategy-text">{post_strat}</div></div>
+    <div class="strategy-box" style="border-left-color: #e9c46a;">
+        <div class="strategy-title">🏃‍♂️ 累積期 (現在) 操作策略</div>
+        <div class="strategy-text">{pre_strat}</div>
+    </div>
+    <div class="strategy-box" style="border-left-color: #2a9d8f;">
+        <div class="strategy-title">🌴 提領期 (未來) 操作策略</div>
+        <div class="strategy-text">{post_strat}</div>
+    </div>
     """, unsafe_allow_html=True)
 
 # ------------------------------------------
 # Tab 2: 長期退休資產壓力測試
 # ------------------------------------------
 with tab2:
+    st.write("")
     current_year = datetime.date.today().year
     asset_u, asset_s = user_principal, spouse_principal
     current_annual_expense = post_retire_expense * 12
@@ -326,10 +356,17 @@ with tab2:
     if user_years_to_retire > 0: fig.add_vline(x=current_year + user_years_to_retire, line_dash="dash", line_color="#e9c46a", annotation_text="參與者A退休", annotation_position="top left")
     if planning_mode == "雙人/家庭" and spouse_years_to_retire > 0: fig.add_vline(x=current_year + spouse_years_to_retire, line_dash="dash", line_color="#e9c46a", annotation_text="參與者B退休", annotation_position="top left")
 
-    fig.update_layout(yaxis_title="金融資產結餘 (TWD)", xaxis_title="觀測年度", hovermode="x unified", template="plotly_white")
+    fig.update_layout(
+        yaxis_title="金融資產結餘 (TWD)", 
+        xaxis_title="觀測年度", 
+        hovermode="x unified", 
+        template="plotly_white",
+        margin=dict(t=50, b=50) # 調整圖表上下邊界
+    )
     st.plotly_chart(fig, use_container_width=True)
     
-    with st.expander("查看完整退休流水帳", expanded=False):
+    st.write("")
+    with st.expander("📊 查看完整退休流水帳", expanded=False):
         df_formatted = df_sim.copy()
         for col in df_formatted.columns:
             if col != '觀測年度': df_formatted[col] = df_formatted[col].map(lambda x: f"{x:,}")

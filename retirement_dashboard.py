@@ -3,9 +3,10 @@ import pandas as pd
 import datetime
 import plotly.express as px
 import plotly.graph_objects as go
+import numpy as np
 
 # ==========================================
-# 1. 網頁全域設定與自訂 CSS (優化版面間距與行距)
+# 1. 網頁全域設定與自訂 CSS
 # ==========================================
 st.set_page_config(page_title="通用版個人/家庭財務戰情中心", layout="wide", page_icon="🏦")
 
@@ -14,11 +15,11 @@ st.markdown("""
     .metric-card {
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
         border-radius: 12px;
-        padding: 25px 20px; /* 加大內邊距 */
+        padding: 25px 20px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.03);
         text-align: center;
         border-top: 4px solid #457b9d;
-        margin-bottom: 25px; /* 加大底部外邊距 */
+        margin-bottom: 25px;
     }
     .metric-label { font-size: 1.1rem; color: #6c757d; font-weight: 600; margin-bottom: 12px; }
     .metric-value { font-size: clamp(1.5rem, 2.5vw, 2rem); font-weight: 700; color: #1d3557; }
@@ -27,7 +28,7 @@ st.markdown("""
     .status-danger { color: #e63946 !important; font-weight: bold; }
     
     .strategy-box {
-        padding: 25px 30px; /* 加大內邊距 */
+        padding: 25px 30px;
         border-radius: 12px;
         background-color: #f8f9fa;
         border-left: 6px solid #457b9d;
@@ -36,20 +37,18 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     .strategy-title { font-size: 1.35rem; font-weight: 700; margin-bottom: 15px; color: #1d3557;}
-    .strategy-text { font-size: 1.1rem; line-height: 1.8; color: #495057; } /* 提高行距，避免字體擠在一起 */
+    .strategy-text { font-size: 1.1rem; line-height: 1.8; color: #495057; }
     
     .alert-box { background-color: #fff3f3; border-left: 6px solid #e63946; }
     .alert-title { color: #e63946; font-weight: bold; font-size: 1.25rem; margin-bottom: 12px; }
     
-    /* 調整 Expander 標題大小與間距 */
     .streamlit-expanderHeader { font-size: 1.1rem !important; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 狀態管理 (Session State) 與資料匯入
+# 2. 狀態管理 (Session State) 與資料匯入/匯出設定
 # ==========================================
-# 預設值參考主計總處 (DGBAS) 之中位數資料
 default_values = {
     "planning_mode": "雙人/家庭",
     "dependent_children": 1,
@@ -61,6 +60,10 @@ default_values = {
     "loan_principal": 5000000,
     "loan_interest_rate": 2.1,
     "loan_years_remaining": 20,
+    "child_age": 10,
+    "college_start_age": 18,
+    "college_years": 4,
+    "annual_college_cost": 250000,
     "user_principal": 1500000,
     "user_annual_contribution": 150000,
     "user_years_to_retire": 15,
@@ -78,13 +81,51 @@ default_values = {
     "exp3_name": "", "exp3_year": 0, "exp3_amount": 0,
 }
 
+key_mapping = {
+    "規劃模式": "planning_mode", "扶養子女數": "dependent_children", "扶養長輩數": "dependent_elders",
+    "年總收入": "annual_income", "年總基礎支出": "annual_expense", "高流動現金存款": "cash_assets",
+    "不動產現值": "real_estate_value", "剩餘貸款本金": "loan_principal", "貸款年利率": "loan_interest_rate",
+    "剩餘攤還年限": "loan_years_remaining", "子女目前年齡": "child_age", "預計就讀大學年齡": "college_start_age",
+    "預計就讀年數": "college_years", "大學每年總花費": "annual_college_cost",
+    "參與者A_初始本金": "user_principal", "參與者A_每年投入金額": "user_annual_contribution",
+    "參與者A_距離退休年數": "user_years_to_retire", "參與者A_預估月退俸": "user_monthly_pension",
+    "參與者B_初始本金": "spouse_principal", "參與者B_每年投入金額": "spouse_annual_contribution",
+    "參與者B_距離退休年數": "spouse_years_to_retire", "參與者B_預估月退俸": "spouse_monthly_pension",
+    "預期年化報酬率": "expected_return_pct", "退休後每月總支出": "post_retire_expense",
+    "基本生活通膨率": "basic_inflation_pct", "特殊專案通膨率": "special_inflation_pct",
+    "支出1名稱": "exp1_name", "支出1幾年後": "exp1_year", "支出1總額": "exp1_amount",
+    "支出2名稱": "exp2_name", "支出2幾年後": "exp2_year", "支出2總額": "exp2_amount",
+    "支出3名稱": "exp3_name", "支出3幾年後": "exp3_year", "支出3總額": "exp3_amount"
+}
+
 for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
 with st.sidebar:
+    st.header("📂 設定檔管理")
+    uploaded_file = st.file_uploader("匯入個人設定檔 (CSV)", type="csv")
+    if uploaded_file is not None:
+        try:
+            df_upload = pd.read_csv(uploaded_file)
+            for index, row in df_upload.iterrows():
+                if row['參數名稱'] in key_mapping:
+                    state_key = key_mapping[row['參數名稱']]
+                    val = row['設定值']
+                    if state_key == "planning_mode": 
+                        st.session_state[state_key] = str(val)
+                    elif isinstance(st.session_state[state_key], int): 
+                        st.session_state[state_key] = int(val) if pd.notna(val) else 0
+                    elif isinstance(st.session_state[state_key], float): 
+                        st.session_state[state_key] = float(val) if pd.notna(val) else 0.0
+                    else: 
+                        st.session_state[state_key] = str(val) if pd.notna(val) else ""
+            st.success("設定檔匯入成功！")
+        except Exception as e:
+            st.error("檔案格式錯誤或讀取失敗。")
+            
+    st.divider()
     st.header("⚙️ 財務參數輸入")
-    st.write("") # 增加空白行
     
     planning_mode = st.radio("選擇財務規劃模式", ["雙人/家庭", "單人"], index=0 if st.session_state["planning_mode"] == "雙人/家庭" else 1, horizontal=True)
     st.session_state["planning_mode"] = planning_mode
@@ -106,8 +147,14 @@ with st.sidebar:
         loan_interest_rate = st.number_input("貸款年利率 (%)", value=st.session_state["loan_interest_rate"], step=0.1)
         loan_years_remaining = st.number_input("剩餘攤還年限 (年)", value=st.session_state["loan_years_remaining"], step=1)
 
+    with st.expander("🎓 子女高等教育經費 (套用特殊通膨)", expanded=True):
+        child_age = st.number_input("子女目前年齡 (歲)", value=st.session_state["child_age"], step=1)
+        college_start_age = st.number_input("預計就讀大學年齡 (歲)", value=st.session_state["college_start_age"], step=1)
+        college_years = st.number_input("預計就讀年數 (年)", value=st.session_state["college_years"], step=1)
+        annual_college_cost = st.number_input("大學每年總花費 (元/年)", value=st.session_state["annual_college_cost"], step=10000, help="全台公私立大學生年開銷中位數約落在 25 萬上下。")
+
     with st.expander("📌 自訂階段性重大支出 (選填)", expanded=True):
-        st.caption("支援 3 筆重大支出 (如：購屋頭期款、長輩照護基金、子女大學學費)，將套用特殊專案通膨率計算。")
+        st.caption("支援 3 筆重大支出 (如：購屋頭期款、長輩照護基金)，將套用特殊專案通膨率計算。")
         for i in range(1, 4):
             c1, c2, c3 = st.columns([2, 1, 1.5], gap="small")
             st.session_state[f"exp{i}_name"] = c1.text_input(f"支出 {i} 名稱", value=st.session_state[f"exp{i}_name"], key=f"name_{i}")
@@ -137,8 +184,15 @@ with st.sidebar:
         st.divider()
         basic_inflation_pct = st.slider("基本生活通膨率 (%)", 0.0, 10.0, st.session_state["basic_inflation_pct"], 0.1)
         basic_inflation = basic_inflation_pct / 100
-        special_inflation_pct = st.slider("特殊專案通膨率 (%)", 0.0, 15.0, st.session_state["special_inflation_pct"], 0.1, help="套用於自訂階段性重大支出 (如醫療、教育)")
+        special_inflation_pct = st.slider("特殊專案通膨率 (%)", 0.0, 15.0, st.session_state["special_inflation_pct"], 0.1, help="套用於自訂階段性重大支出與大學教育經費")
         special_inflation = special_inflation_pct / 100
+
+    st.divider()
+    st.download_button(
+        label="📥 匯出個人設定檔 (CSV)",
+        data=pd.DataFrame({"參數名稱": list(key_mapping.keys()), "設定值": [st.session_state[k] for k in key_mapping.values()]}).to_csv(index=False).encode('utf-8-sig'),
+        file_name=f"{prefix}財務設定檔_{datetime.date.today().strftime('%Y%m%d')}.csv", mime="text/csv"
+    )
 
 # ==========================================
 # 3. 核心運算：本金平均攤還演算法與資產推算
@@ -146,7 +200,7 @@ with st.sidebar:
 def calculate_annual_debt_payment(principal, annual_rate, years, current_year_index):
     """計算本金平均攤還（本金利息一起還）特定年度的總現金流流出"""
     if years <= 0 or principal <= 0 or current_year_index >= years:
-        return 0  # 修正：回傳單一數值 0，避免型別錯誤
+        return 0
         
     monthly_rate = annual_rate / 100 / 12
     total_months = years * 12
@@ -201,7 +255,6 @@ tab1, tab2 = st.tabs(["🏥 第一階段：財務體質與雙階段自由度", "
 with tab1:
     st.write("")
     st.markdown("### 🛡️ 基礎防禦指標")
-    # 加入 gap="large" 讓卡片不要擠在一起
     c1, c2, c3 = st.columns(3, gap="large") 
     
     em_color = "status-excellent" if emergency_months >= safe_em_months else ("status-warning" if emergency_months >= warn_em_months else "status-danger")
@@ -276,6 +329,13 @@ with tab2:
 
         if i > 1: current_annual_expense = int(current_annual_expense * (1 + basic_inflation))
             
+        # 計算當年度教育經費 (套用特殊專案通膨)
+        child_age_this_year = child_age + i
+        if college_start_age <= child_age_this_year < college_start_age + college_years:
+            edu_expense_this_year = int(annual_college_cost * ((1 + special_inflation) ** i))
+        else:
+            edu_expense_this_year = 0
+
         # 檢測自訂階段性重大支出 (套用特殊專案通膨率)
         special_expense_this_year = 0
         for j in range(1, 4):
@@ -283,7 +343,7 @@ with tab2:
                 special_expense_this_year += int(st.session_state[f"exp{j}_amount"] * ((1 + special_inflation) ** i))
             
         base_shortfall = max(0, current_annual_expense - total_pension_received) if (user_retired or spouse_retired) else 0
-        total_shortfall_needed = base_shortfall + special_expense_this_year + debt_expense_this_year
+        total_shortfall_needed = base_shortfall + special_expense_this_year + debt_expense_this_year + edu_expense_this_year
         
         if total_shortfall_needed > 0:
             if cont_u >= total_shortfall_needed:
@@ -311,7 +371,7 @@ with tab2:
                 if asset_s < 0: asset_s = 0
                     
         total_family_asset = asset_u + asset_s
-        if total_family_asset <= 0 and bankrupt_year is None and (user_retired or spouse_retired or special_expense_this_year > 0):
+        if total_family_asset <= 0 and bankrupt_year is None and (user_retired or spouse_retired or special_expense_this_year > 0 or edu_expense_this_year > 0):
             bankrupt_year = year_label
             
         row_data = {
@@ -320,6 +380,7 @@ with tab2:
             "總流動資產": int(total_family_asset),
             "年度總月退俸": int(total_pension_received),
             "通膨後預估支出": int(current_annual_expense) if (user_retired or spouse_retired) else 0,
+            "子女教育支出": int(edu_expense_this_year),
             "重大專案支出": int(special_expense_this_year),
             "貸款攤還流出": int(debt_expense_this_year),
             "從資產提領金額": int(total_shortfall_needed)
@@ -361,7 +422,7 @@ with tab2:
         xaxis_title="觀測年度", 
         hovermode="x unified", 
         template="plotly_white",
-        margin=dict(t=50, b=50) # 調整圖表上下邊界
+        margin=dict(t=50, b=50)
     )
     st.plotly_chart(fig, use_container_width=True)
     

@@ -60,7 +60,6 @@ default_values = {
     "loan_principal": 5000000,
     "loan_interest_rate": 2.1,
     "loan_years_remaining": 20,
-    "child_age": 10,
     "college_start_age": 18,
     "college_years": 4,
     "annual_college_cost": 250000,
@@ -81,11 +80,15 @@ default_values = {
     "exp3_name": "", "exp3_year": 0, "exp3_amount": 0,
 }
 
+# 動態預設最多 5 位子女的年齡
+for i in range(1, 6):
+    default_values[f"child_{i}_age"] = 10 - (i-1)*2 if (10 - (i-1)*2) > 0 else 0
+
 key_mapping = {
     "規劃模式": "planning_mode", "扶養子女數": "dependent_children", "扶養長輩數": "dependent_elders",
     "年總收入": "annual_income", "年總基礎支出": "annual_expense", "高流動現金存款": "cash_assets",
     "不動產現值": "real_estate_value", "剩餘貸款本金": "loan_principal", "貸款年利率": "loan_interest_rate",
-    "剩餘攤還年限": "loan_years_remaining", "最年長子女目前年齡": "child_age", "預計就讀大學年齡": "college_start_age",
+    "剩餘攤還年限": "loan_years_remaining", "預計就讀大學年齡": "college_start_age",
     "預計就讀年數": "college_years", "每人每年大學總花費": "annual_college_cost",
     "參與者A_初始本金": "user_principal", "參與者A_每年投入金額": "user_annual_contribution",
     "參與者A_距離退休年數": "user_years_to_retire", "參與者A_預估月退俸": "user_monthly_pension",
@@ -97,6 +100,8 @@ key_mapping = {
     "支出2名稱": "exp2_name", "支出2幾年後": "exp2_year", "支出2總額": "exp2_amount",
     "支出3名稱": "exp3_name", "支出3幾年後": "exp3_year", "支出3總額": "exp3_amount"
 }
+for i in range(1, 6):
+    key_mapping[f"第{i}位子女年齡"] = f"child_{i}_age"
 
 for key, val in default_values.items():
     if key not in st.session_state:
@@ -133,7 +138,8 @@ with st.sidebar:
     st.write("")
 
     with st.expander(f"👥 扶養與收支現況 (主計處中位數參考)", expanded=False):
-        dependent_children = st.number_input("扶養子女數 (人)", value=st.session_state["dependent_children"], step=1)
+        dependent_children = st.number_input("扶養子女數 (人)", value=st.session_state["dependent_children"], min_value=0, max_value=5, step=1)
+        st.session_state["dependent_children"] = dependent_children
         dependent_elders = st.number_input("扶養長輩數 (人)", value=st.session_state["dependent_elders"], step=1)
         st.divider()
         annual_income = st.number_input(f"{prefix}年總收入 (元)", value=st.session_state["annual_income"], step=50000)
@@ -148,7 +154,21 @@ with st.sidebar:
         loan_years_remaining = st.number_input("剩餘攤還年限 (年)", value=st.session_state["loan_years_remaining"], step=1)
 
     with st.expander("🎓 子女高等教育經費 (套用特殊通膨)", expanded=True):
-        child_age = st.number_input("最年長子女目前年齡 (歲)", value=st.session_state["child_age"], step=1, help="若有多名子女，系統將自動以『相差 2 歲』的間距推算後續子女的就學年度與重疊花費。")
+        if dependent_children > 0:
+            st.caption("請輸入每一位子女的目前年齡：")
+            cols = st.columns(min(dependent_children, 3))
+            for i in range(dependent_children):
+                col_idx = i % 3
+                st.session_state[f"child_{i+1}_age"] = cols[col_idx].number_input(
+                    f"第 {i+1} 位年齡", 
+                    value=st.session_state.get(f"child_{i+1}_age", 0), 
+                    step=1, 
+                    key=f"child_age_input_{i+1}"
+                )
+            st.divider()
+        else:
+            st.info("目前設定無扶養子女。")
+            
         college_start_age = st.number_input("預計就讀大學年齡 (歲)", value=st.session_state["college_start_age"], step=1)
         college_years = st.number_input("預計就讀年數 (年)", value=st.session_state["college_years"], step=1)
         annual_college_cost = st.number_input("『每人』每年大學總花費 (元/年)", value=st.session_state["annual_college_cost"], step=10000)
@@ -190,7 +210,7 @@ with st.sidebar:
     st.divider()
     st.download_button(
         label="📥 匯出個人設定檔 (CSV)",
-        data=pd.DataFrame({"參數名稱": list(key_mapping.keys()), "設定值": [st.session_state[k] for k in key_mapping.values()]}).to_csv(index=False).encode('utf-8-sig'),
+        data=pd.DataFrame({"參數名稱": list(key_mapping.keys()), "設定值": [st.session_state.get(k, 0) for k in key_mapping.values()]}).to_csv(index=False).encode('utf-8-sig'),
         file_name=f"{prefix}財務設定檔_{datetime.date.today().strftime('%Y%m%d')}.csv", mime="text/csv"
     )
 
@@ -329,10 +349,10 @@ with tab2:
 
         if i > 1: current_annual_expense = int(current_annual_expense * (1 + basic_inflation))
             
-        # 計算當年度教育經費 (依據扶養子女數自動疊加，預設間隔 2 歲)
+        # 計算當年度教育經費 (讀取每一位子女的獨立年齡)
         edu_expense_this_year = 0
-        for child_idx in range(int(dependent_children)):
-            current_child_age = child_age - (child_idx * 2) + i
+        for child_idx in range(1, int(dependent_children) + 1):
+            current_child_age = st.session_state.get(f"child_{child_idx}_age", 0) + i
             if college_start_age <= current_child_age < college_start_age + college_years:
                 edu_expense_this_year += int(annual_college_cost * ((1 + special_inflation) ** i))
 

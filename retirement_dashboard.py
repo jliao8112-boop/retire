@@ -85,8 +85,8 @@ key_mapping = {
     "規劃模式": "planning_mode", "扶養子女數": "dependent_children", "扶養長輩數": "dependent_elders",
     "年總收入": "annual_income", "年總基礎支出": "annual_expense", "高流動現金存款": "cash_assets",
     "不動產現值": "real_estate_value", "剩餘貸款本金": "loan_principal", "貸款年利率": "loan_interest_rate",
-    "剩餘攤還年限": "loan_years_remaining", "子女目前年齡": "child_age", "預計就讀大學年齡": "college_start_age",
-    "預計就讀年數": "college_years", "大學每年總花費": "annual_college_cost",
+    "剩餘攤還年限": "loan_years_remaining", "最年長子女目前年齡": "child_age", "預計就讀大學年齡": "college_start_age",
+    "預計就讀年數": "college_years", "每人每年大學總花費": "annual_college_cost",
     "參與者A_初始本金": "user_principal", "參與者A_每年投入金額": "user_annual_contribution",
     "參與者A_距離退休年數": "user_years_to_retire", "參與者A_預估月退俸": "user_monthly_pension",
     "參與者B_初始本金": "spouse_principal", "參與者B_每年投入金額": "spouse_annual_contribution",
@@ -148,10 +148,10 @@ with st.sidebar:
         loan_years_remaining = st.number_input("剩餘攤還年限 (年)", value=st.session_state["loan_years_remaining"], step=1)
 
     with st.expander("🎓 子女高等教育經費 (套用特殊通膨)", expanded=True):
-        child_age = st.number_input("子女目前年齡 (歲)", value=st.session_state["child_age"], step=1)
+        child_age = st.number_input("最年長子女目前年齡 (歲)", value=st.session_state["child_age"], step=1, help="若有多名子女，系統將自動以『相差 2 歲』的間距推算後續子女的就學年度與重疊花費。")
         college_start_age = st.number_input("預計就讀大學年齡 (歲)", value=st.session_state["college_start_age"], step=1)
         college_years = st.number_input("預計就讀年數 (年)", value=st.session_state["college_years"], step=1)
-        annual_college_cost = st.number_input("大學每年總花費 (元/年)", value=st.session_state["annual_college_cost"], step=10000, help="全台公私立大學生年開銷中位數約落在 25 萬上下。")
+        annual_college_cost = st.number_input("『每人』每年大學總花費 (元/年)", value=st.session_state["annual_college_cost"], step=10000)
 
     with st.expander("📌 自訂階段性重大支出 (選填)", expanded=True):
         st.caption("支援 3 筆重大支出 (如：購屋頭期款、長輩照護基金)，將套用特殊專案通膨率計算。")
@@ -329,12 +329,12 @@ with tab2:
 
         if i > 1: current_annual_expense = int(current_annual_expense * (1 + basic_inflation))
             
-        # 計算當年度教育經費 (套用特殊專案通膨)
-        child_age_this_year = child_age + i
-        if college_start_age <= child_age_this_year < college_start_age + college_years:
-            edu_expense_this_year = int(annual_college_cost * ((1 + special_inflation) ** i))
-        else:
-            edu_expense_this_year = 0
+        # 計算當年度教育經費 (依據扶養子女數自動疊加，預設間隔 2 歲)
+        edu_expense_this_year = 0
+        for child_idx in range(int(dependent_children)):
+            current_child_age = child_age - (child_idx * 2) + i
+            if college_start_age <= current_child_age < college_start_age + college_years:
+                edu_expense_this_year += int(annual_college_cost * ((1 + special_inflation) ** i))
 
         # 檢測自訂階段性重大支出 (套用特殊專案通膨率)
         special_expense_this_year = 0
@@ -380,7 +380,7 @@ with tab2:
             "總流動資產": int(total_family_asset),
             "年度總月退俸": int(total_pension_received),
             "通膨後預估支出": int(current_annual_expense) if (user_retired or spouse_retired) else 0,
-            "子女教育支出": int(edu_expense_this_year),
+            "多名子女教育總支出": int(edu_expense_this_year),
             "重大專案支出": int(special_expense_this_year),
             "貸款攤還流出": int(debt_expense_this_year),
             "從資產提領金額": int(total_shortfall_needed)

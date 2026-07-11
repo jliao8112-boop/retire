@@ -47,8 +47,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 狀態管理 (Session State) 與資料匯入/匯出設定
+# 2. 記憶體管理與初始化 (Session State)
 # ==========================================
+# 側邊欄：一鍵重置按鈕 (核彈級清除)
+with st.sidebar:
+    if st.button("🔄 清除記憶體並重置設定", use_container_width=True, type="primary"):
+        st.session_state.clear()
+        st.rerun()
+    st.write("")
+
 default_values = {
     "planning_mode": "雙人/家庭",
     "dependent_children": 1,
@@ -66,15 +73,11 @@ default_values = {
     "user_principal": 1500000,
     "user_annual_contribution": 150000,
     "user_years_to_retire": 15,
-    "user_pension_strategy": "正常請領",
     "user_monthly_pension": 25000,
-    "user_lump_sum": 2000000,
     "spouse_principal": 1000000,
     "spouse_annual_contribution": 100000,
     "spouse_years_to_retire": 15,
-    "spouse_pension_strategy": "正常請領",
     "spouse_monthly_pension": 25000,
-    "spouse_lump_sum": 2000000,
     "expected_return_pct": 6.0,
     "post_retire_expense": 60000,
     "basic_inflation_pct": 2.0,
@@ -94,11 +97,9 @@ key_mapping = {
     "剩餘攤還年限": "loan_years_remaining", "預計就讀大學年齡": "college_start_age",
     "預計就讀年數": "college_years", "每人每年大學總花費": "annual_college_cost",
     "參與者A_初始本金": "user_principal", "參與者A_每年投入金額": "user_annual_contribution",
-    "參與者A_距離退休年數": "user_years_to_retire", "參與者A_請領策略": "user_pension_strategy",
-    "參與者A_預估月退俸": "user_monthly_pension", "參與者A_預估一次請領": "user_lump_sum",
+    "參與者A_距離退休年數": "user_years_to_retire", "參與者A_預估月退俸": "user_monthly_pension",
     "參與者B_初始本金": "spouse_principal", "參與者B_每年投入金額": "spouse_annual_contribution",
-    "參與者B_距離退休年數": "spouse_years_to_retire", "參與者B_請領策略": "spouse_pension_strategy",
-    "參與者B_預估月退俸": "spouse_monthly_pension", "參與者B_預估一次請領": "spouse_lump_sum",
+    "參與者B_距離退休年數": "spouse_years_to_retire", "參與者B_預估月退俸": "spouse_monthly_pension",
     "預期年化報酬率": "expected_return_pct", "退休後每月總支出": "post_retire_expense",
     "基本生活通膨率": "basic_inflation_pct", "特殊專案通膨率": "special_inflation_pct",
     "支出1名稱": "exp1_name", "支出1幾年後": "exp1_year", "支出1總額": "exp1_amount",
@@ -108,10 +109,14 @@ key_mapping = {
 for i in range(1, 6):
     key_mapping[f"第{i}位子女年齡"] = f"child_{i}_age"
 
+# 初始化尚未存在的變數
 for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
+# ==========================================
+# 3. 介面輸入與動態參數綁定
+# ==========================================
 with st.sidebar:
     st.header("📂 設定檔管理")
     uploaded_file = st.file_uploader("匯入個人設定檔 (CSV)", type="csv")
@@ -122,12 +127,14 @@ with st.sidebar:
                 if row['參數名稱'] in key_mapping:
                     state_key = key_mapping[row['參數名稱']]
                     val = row['設定值']
-                    if state_key in ["planning_mode", "user_pension_strategy", "spouse_pension_strategy", "exp1_name", "exp2_name", "exp3_name"]: 
-                        st.session_state[state_key] = str(val) if pd.notna(val) else ""
+                    if state_key == "planning_mode": 
+                        st.session_state[state_key] = str(val)
                     elif isinstance(st.session_state[state_key], int): 
                         st.session_state[state_key] = int(val) if pd.notna(val) else 0
                     elif isinstance(st.session_state[state_key], float): 
                         st.session_state[state_key] = float(val) if pd.notna(val) else 0.0
+                    else: 
+                        st.session_state[state_key] = str(val) if pd.notna(val) else ""
             st.success("設定檔匯入成功！")
         except Exception as e:
             st.error("檔案格式錯誤或讀取失敗。")
@@ -140,9 +147,15 @@ with st.sidebar:
     prefix = "家庭" if planning_mode == "雙人/家庭" else "個人"
     st.write("")
 
-    with st.expander(f"👥 扶養與收支現況", expanded=False):
+    with st.expander(f"👥 扶養與收支現況 (主計處中位數參考)", expanded=False):
         dependent_children = st.number_input("扶養子女數 (人)", value=st.session_state["dependent_children"], min_value=0, max_value=5, step=1)
         st.session_state["dependent_children"] = dependent_children
+        
+        # 局部動態清理機制：自動刪除被縮減的小孩年齡記憶體
+        for i in range(dependent_children + 1, 6):
+            if f"child_{i}_age" in st.session_state:
+                del st.session_state[f"child_{i}_age"]
+                
         dependent_elders = st.number_input("扶養長輩數 (人)", value=st.session_state["dependent_elders"], step=1)
         st.divider()
         annual_income = st.number_input(f"{prefix}年總收入 (元)", value=st.session_state["annual_income"], step=50000)
@@ -156,15 +169,17 @@ with st.sidebar:
         loan_interest_rate = st.number_input("貸款年利率 (%)", value=st.session_state["loan_interest_rate"], step=0.1)
         loan_years_remaining = st.number_input("剩餘攤還年限 (年)", value=st.session_state["loan_years_remaining"], step=1)
 
-    with st.expander("🎓 子女高等教育經費", expanded=True):
+    with st.expander("🎓 子女高等教育經費 (套用特殊通膨)", expanded=True):
         if dependent_children > 0:
             st.caption("請輸入每一位子女的目前年齡：")
             cols = st.columns(min(dependent_children, 3))
             for i in range(dependent_children):
                 col_idx = i % 3
+                # 安全讀取，若被刪除則以預設值重新生成
+                default_age = default_values[f"child_{i+1}_age"]
                 st.session_state[f"child_{i+1}_age"] = cols[col_idx].number_input(
                     f"第 {i+1} 位年齡", 
-                    value=st.session_state.get(f"child_{i+1}_age", 0), 
+                    value=st.session_state.get(f"child_{i+1}_age", default_age), 
                     step=1, 
                     key=f"child_age_input_{i+1}"
                 )
@@ -176,7 +191,8 @@ with st.sidebar:
         college_years = st.number_input("預計就讀年數 (年)", value=st.session_state["college_years"], step=1)
         annual_college_cost = st.number_input("『每人』每年大學總花費 (元/年)", value=st.session_state["annual_college_cost"], step=10000)
 
-    with st.expander("📌 自訂階段性重大支出", expanded=True):
+    with st.expander("📌 自訂階段性重大支出 (選填)", expanded=True):
+        st.caption("支援 3 筆重大支出 (如：購屋頭期款、長輩照護基金)，將套用特殊專案通膨率計算。")
         for i in range(1, 4):
             c1, c2, c3 = st.columns([2, 1, 1.5], gap="small")
             st.session_state[f"exp{i}_name"] = c1.text_input(f"支出 {i} 名稱", value=st.session_state[f"exp{i}_name"], key=f"name_{i}")
@@ -184,49 +200,29 @@ with st.sidebar:
             st.session_state[f"exp{i}_amount"] = c3.number_input("現值總額", value=st.session_state[f"exp{i}_amount"], step=50000, key=f"amt_{i}")
             if i < 3: st.write("")
 
-    with st.expander("👨 參與者 A：法定年金與資產模擬", expanded=True):
+    with st.expander("👨 參與者 A：財務規劃與模擬", expanded=True):
         user_principal = st.number_input("初始本金 (元)", value=st.session_state["user_principal"], step=50000)
         user_annual_contribution = st.number_input("每年投入金額 (元)", value=st.session_state["user_annual_contribution"], step=10000)
-        user_years_to_retire = st.slider("距離原定退休尚有幾年？", 0, 40, st.session_state["user_years_to_retire"])
-        
-        st.divider()
-        st.session_state["user_pension_strategy"] = st.selectbox("法定退休金請領策略", ["正常請領", "提早 5 年 (-20%)", "延後 5 年 (+20%)", "一次請領"], index=["正常請領", "提早 5 年 (-20%)", "延後 5 年 (+20%)", "一次請領"].index(st.session_state["user_pension_strategy"]))
-        if st.session_state["user_pension_strategy"] == "一次請領":
-            user_lump_sum = st.number_input("預估一次請領總額 (元)", value=st.session_state["user_lump_sum"], step=100000)
-            st.session_state["user_lump_sum"] = user_lump_sum
-            user_monthly_pension = 0
-        else:
-            user_monthly_pension = st.number_input("預估基準月退俸 (元)", value=st.session_state["user_monthly_pension"], step=5000)
-            st.session_state["user_monthly_pension"] = user_monthly_pension
-            user_lump_sum = 0
+        user_years_to_retire = st.slider("距離退休尚有幾年？", 0, 40, st.session_state["user_years_to_retire"])
+        user_monthly_pension = st.number_input("預估月退俸 (元)", value=st.session_state["user_monthly_pension"], step=5000)
 
     if planning_mode == "雙人/家庭":
-        with st.expander("👩 參與者 B：法定年金與資產模擬", expanded=True):
+        with st.expander("👩 參與者 B：財務規劃與模擬", expanded=True):
             spouse_principal = st.number_input("參與者B_初始本金 (元)", value=st.session_state["spouse_principal"], step=50000)
             spouse_annual_contribution = st.number_input("參與者B_每年投入金額 (元)", value=st.session_state["spouse_annual_contribution"], step=10000)
-            spouse_years_to_retire = st.slider("參與者B_距離原定退休尚有幾年？", 0, 40, st.session_state["spouse_years_to_retire"])
-            
-            st.divider()
-            st.session_state["spouse_pension_strategy"] = st.selectbox("參與者B_法定退休金請領策略", ["正常請領", "提早 5 年 (-20%)", "延後 5 年 (+20%)", "一次請領"], index=["正常請領", "提早 5 年 (-20%)", "延後 5 年 (+20%)", "一次請領"].index(st.session_state["spouse_pension_strategy"]))
-            if st.session_state["spouse_pension_strategy"] == "一次請領":
-                spouse_lump_sum = st.number_input("參與者B_預估一次請領總額 (元)", value=st.session_state["spouse_lump_sum"], step=100000)
-                st.session_state["spouse_lump_sum"] = spouse_lump_sum
-                spouse_monthly_pension = 0
-            else:
-                spouse_monthly_pension = st.number_input("參與者B_預估基準月退俸 (元)", value=st.session_state["spouse_monthly_pension"], step=5000)
-                st.session_state["spouse_monthly_pension"] = spouse_monthly_pension
-                spouse_lump_sum = 0
+            spouse_years_to_retire = st.slider("參與者B_距離退休尚有幾年？", 0, 40, st.session_state["spouse_years_to_retire"])
+            spouse_monthly_pension = st.number_input("參與者B_預估月退俸 (元)", value=st.session_state["spouse_monthly_pension"], step=5000)
     else:
-        spouse_principal = 0; spouse_annual_contribution = 0; spouse_years_to_retire = 0; spouse_monthly_pension = 0; spouse_lump_sum = 0
+        spouse_principal = 0; spouse_annual_contribution = 0; spouse_years_to_retire = 0; spouse_monthly_pension = 0
         
     with st.expander("📈 總體經濟參數 (雙軌通膨)", expanded=True):
         expected_return_pct = st.slider("預期年化報酬率 (%)", 0.0, 20.0, st.session_state["expected_return_pct"], 0.1)
         expected_return = expected_return_pct / 100
         post_retire_expense = st.number_input("預估退休後『每月』總支出 (元)", value=st.session_state["post_retire_expense"], step=5000)
         st.divider()
-        basic_inflation_pct = st.slider("基本生活通膨率 (%)", 0.0, 10.0, st.session_state["basic_inflation_pct"], 0.1, help="套用於日常支出，並作為年金抗通膨的調升依據。")
+        basic_inflation_pct = st.slider("基本生活通膨率 (%)", 0.0, 10.0, st.session_state["basic_inflation_pct"], 0.1)
         basic_inflation = basic_inflation_pct / 100
-        special_inflation_pct = st.slider("特殊專案通膨率 (%)", 0.0, 15.0, st.session_state["special_inflation_pct"], 0.1, help="套用於自訂階段性重大支出與大學教育經費。")
+        special_inflation_pct = st.slider("特殊專案通膨率 (%)", 0.0, 15.0, st.session_state["special_inflation_pct"], 0.1, help="套用於自訂階段性重大支出與大學教育經費")
         special_inflation = special_inflation_pct / 100
 
     st.divider()
@@ -237,26 +233,32 @@ with st.sidebar:
     )
 
 # ==========================================
-# 3. 核心運算模組
+# 4. 核心運算：本金平均攤還演算法與資產推算
 # ==========================================
 def calculate_annual_debt_payment(principal, annual_rate, years, current_year_index):
+    """計算本金平均攤還（本金利息一起還）特定年度的總現金流流出"""
     if years <= 0 or principal <= 0 or current_year_index >= years:
         return 0
+        
     monthly_rate = annual_rate / 100 / 12
     total_months = years * 12
     monthly_principal = principal / total_months
     start_month = current_year_index * 12
     annual_interest = 0
+    
     for m in range(start_month, start_month + 12):
         if m < total_months:
             remaining_principal = principal - (monthly_principal * m)
             annual_interest += remaining_principal * monthly_rate
+            
     annual_principal = monthly_principal * 12 if current_year_index < years else 0
     return annual_principal + annual_interest
 
 first_year_debt_pay = calculate_annual_debt_payment(loan_principal, loan_interest_rate, loan_years_remaining, 0)
-monthly_expense_now = (annual_expense + first_year_debt_pay) / 12 if (annual_expense + first_year_debt_pay) > 0 else 1
+
 total_financial_assets = user_principal + spouse_principal
+monthly_expense_now = (annual_expense + first_year_debt_pay) / 12 if (annual_expense + first_year_debt_pay) > 0 else 1
+
 emergency_months = cash_assets / monthly_expense_now if monthly_expense_now > 0 else 0
 savings_rate = ((annual_income - annual_expense - first_year_debt_pay) / annual_income) * 100 if annual_income > 0 else 0
 total_assets_value = cash_assets + total_financial_assets + real_estate_value
@@ -264,16 +266,29 @@ debt_ratio = (loan_principal / total_assets_value) * 100 if total_assets_value >
 
 current_passive_income = (total_financial_assets * expected_return) / 12
 pre_retire_fi_rate = (current_passive_income / monthly_expense_now) * 100 if monthly_expense_now > 0 else 0
+
+future_asset_u = user_principal
+for _ in range(user_years_to_retire): future_asset_u = future_asset_u * (1 + expected_return) + user_annual_contribution
+
+future_asset_s = spouse_principal if planning_mode == "雙人/家庭" else 0
+if planning_mode == "雙人/家庭":
+    for _ in range(spouse_years_to_retire): future_asset_s = future_asset_s * (1 + expected_return) + spouse_annual_contribution
+
+total_future_assets = future_asset_u + future_asset_s
+total_future_pension = user_monthly_pension + spouse_monthly_pension
+future_passive_income = (total_future_assets * expected_return) / 12
+post_retire_fi_rate = ((total_future_pension + future_passive_income) / post_retire_expense) * 100 if post_retire_expense > 0 else 0
+
 safe_em_months = 6 if planning_mode == "雙人/家庭" else 9
 warn_em_months = 3 if planning_mode == "雙人/家庭" else 6
 
 # ==========================================
-# 4. 主畫面：分頁架構
+# 5. 主畫面：分頁架構
 # ==========================================
 st.title(f"🏦 通用版{prefix}財務戰情中心")
 st.write("")
 
-tab1, tab2 = st.tabs(["🏥 第一階段：財務體質檢驗", "🚀 第二階段：年金策略與資產壓力測試"])
+tab1, tab2 = st.tabs(["🏥 第一階段：財務體質與雙階段自由度", "🚀 第二階段：長期退休資產壓力測試"])
 
 with tab1:
     st.write("")
@@ -290,21 +305,39 @@ with tab1:
     c3.markdown(f'<div class="metric-card"><div class="metric-label">負債資產比</div><div class="metric-value {db_color}">{debt_ratio:.1f} <span style="font-size:1.1rem;">%</span></div></div>', unsafe_allow_html=True)
 
     st.divider()
-    st.markdown("### 🧭 現有資產戰略診斷")
     
-    if pre_retire_fi_rate >= 100: pre_strat = "<b>完全財務獨立：</b>當下的資產孳息已超越目前開銷。現階段的工作純屬個人選擇，無需急於將閒置資金全部投入，可將目標設定為觀察名單，耐心等待優質資產來到<b>甜甜價</b>時再進行長線佈局，同時開始提高生活品質。"
+    st.markdown("### 🎯 雙階段財務獨立度評估")
+    c4, c5, c6 = st.columns(3, gap="large")
+    
+    c4.markdown(f'<div class="metric-card" style="border-top-color:#e9c46a;"><div class="metric-label">退休前財務獨立度</div><div class="metric-value" style="color:#e9c46a;">{pre_retire_fi_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">現有資產孳息覆蓋當下生活</div></div>', unsafe_allow_html=True)
+    c5.markdown(f'<div class="metric-card" style="border-top-color:#2a9d8f;"><div class="metric-label">退休後財務獨立度</div><div class="metric-value" style="color:#2a9d8f;">{post_retire_fi_rate:.1f} <span style="font-size:1.1rem;">%</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">被動總收入覆蓋退休生活</div></div>', unsafe_allow_html=True)
+    c6.markdown(f'<div class="metric-card" style="border-top-color:#457b9d;"><div class="metric-label">預估退休時總流動資產</div><div class="metric-value">{int(total_future_assets):,} <span style="font-size:1.1rem;">元</span></div><div style="font-size:0.9rem; color:#888; margin-top:8px;">(邁入退休年份時之預估值)</div></div>', unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("### 🧭 演算法戰略診斷報告")
+    
+    if pre_retire_fi_rate >= 100: pre_strat = "<b>完全財務自由：</b>當下的資產孳息已超越目前開銷。現階段的工作純屬個人選擇，無需急於將閒置資金全部投入，可將目標設定為觀察名單，耐心等待優質資產來到<b>甜甜價</b>時再進行長線佈局，同時開始提高生活品質。"
     elif pre_retire_fi_rate >= 50: pre_strat = "<b>具備半退休底氣：</b>資產已具備強大防禦力。請保持年度投入紀律，避免盲目擴張消費，耐心等待資產複利增長。"
     else: pre_strat = "<b>高度依賴主動收入：</b>目前資產孳息不足以支撐現有生活。首要任務是保住本業收入，透過提高「淨儲蓄率」加大投入力道。"
 
+    if post_retire_fi_rate >= 150: post_strat = "<b>資產跨世代溢出：</b>未來的被動現金流將遠超預估支出。建議將多餘額度用於高階醫療保險、極致旅遊體驗，或啟動資產傳承規劃。"
+    elif post_retire_fi_rate >= 100: post_strat = "<b>安全降落無虞：</b>被動收入能完美覆蓋退休生活。退休後只需將部位維持在全市場大盤指數股票型基金，遵循安全提領率紀律提領，無需承擔過多選股風險。"
+    else: post_strat = "<b>存在未來現金流缺口：</b>預估的被動收入不足以支撐退休生活。請務必拉長累積期，或在下方壓力測試區塊參考「危機應急指南」。"
+
     st.markdown(f"""
     <div class="strategy-box" style="border-left-color: #e9c46a;">
-        <div class="strategy-title">🏃‍♂️ 累積期操作策略</div>
+        <div class="strategy-title">🏃‍♂️ 累積期 (現在) 操作策略</div>
         <div class="strategy-text">{pre_strat}</div>
+    </div>
+    <div class="strategy-box" style="border-left-color: #2a9d8f;">
+        <div class="strategy-title">🌴 提領期 (未來) 操作策略</div>
+        <div class="strategy-text">{post_strat}</div>
     </div>
     """, unsafe_allow_html=True)
 
 # ------------------------------------------
-# Tab 2: 長期退休資產壓力測試 (導入年金策略)
+# Tab 2: 長期退休資產壓力測試
 # ------------------------------------------
 with tab2:
     st.write("")
@@ -314,79 +347,40 @@ with tab2:
     sim_rows = []
     bankrupt_year = None
     
-    # 定義參與者 A 實際請領參數
-    u_retire_trigger = user_years_to_retire
-    u_base_pension = user_monthly_pension
-    if st.session_state["user_pension_strategy"] == "提早 5 年 (-20%)":
-        u_retire_trigger = max(0, user_years_to_retire - 5)
-        u_base_pension = user_monthly_pension * 0.8
-    elif st.session_state["user_pension_strategy"] == "延後 5 年 (+20%)":
-        u_retire_trigger = user_years_to_retire + 5
-        u_base_pension = user_monthly_pension * 1.2
-
-    # 定義參與者 B 實際請領參數
-    s_retire_trigger = spouse_years_to_retire
-    s_base_pension = spouse_monthly_pension
-    if st.session_state["spouse_pension_strategy"] == "提早 5 年 (-20%)":
-        s_retire_trigger = max(0, spouse_years_to_retire - 5)
-        s_base_pension = spouse_monthly_pension * 0.8
-    elif st.session_state["spouse_pension_strategy"] == "延後 5 年 (+20%)":
-        s_retire_trigger = spouse_years_to_retire + 5
-        s_base_pension = spouse_monthly_pension * 1.2
-
     for i in range(1, 51):
         year_label = current_year + i
+        user_retired = i > user_years_to_retire
+        spouse_retired = (i > spouse_years_to_retire) if planning_mode == "雙人/家庭" else False
         
-        # 判斷是否進入請領期
-        u_is_receiving = i > u_retire_trigger
-        s_is_receiving = (i > s_retire_trigger) if planning_mode == "雙人/家庭" else False
-        
-        # 投資收益
         inv_income_u = int(asset_u * expected_return) if asset_u > 0 else 0
         inv_income_s = int(asset_s * expected_return) if asset_s > 0 else 0
         
-        # 本金投入 (退休前才投入)
-        cont_u = user_annual_contribution if i <= user_years_to_retire else 0
-        cont_s = spouse_annual_contribution if i <= spouse_years_to_retire else 0
+        cont_u = user_annual_contribution if not user_retired else 0
+        cont_s = spouse_annual_contribution if not spouse_retired else 0
         
-        # 一次請領的資金挹注邏輯
-        if st.session_state["user_pension_strategy"] == "一次請領" and i == user_years_to_retire:
-            asset_u += user_lump_sum
-        if planning_mode == "雙人/家庭" and st.session_state["spouse_pension_strategy"] == "一次請領" and i == spouse_years_to_retire:
-            asset_s += spouse_lump_sum
-        
-        # 計算動態月退俸 (加入抗通膨機制：請領後才隨基本通膨調升)
-        pension_u = 0
-        if u_is_receiving and st.session_state["user_pension_strategy"] != "一次請領":
-            years_receiving_u = i - u_retire_trigger
-            pension_u = int(u_base_pension * 12 * ((1 + basic_inflation) ** years_receiving_u))
-            
-        pension_s = 0
-        if s_is_receiving and st.session_state["spouse_pension_strategy"] != "一次請領":
-            years_receiving_s = i - s_retire_trigger
-            pension_s = int(s_base_pension * 12 * ((1 + basic_inflation) ** years_receiving_s))
-            
+        pension_u = user_monthly_pension * 12 if user_retired else 0
+        pension_s = spouse_monthly_pension * 12 if (spouse_retired and planning_mode == "雙人/家庭") else 0
         total_pension_received = pension_u + pension_s
         
-        # 貸款支出與花費通膨
+        # 貸款支出 (本金平均攤還)
         debt_expense_this_year = calculate_annual_debt_payment(loan_principal, loan_interest_rate, loan_years_remaining, i-1)
+
         if i > 1: current_annual_expense = int(current_annual_expense * (1 + basic_inflation))
             
-        # 計算當年度教育經費
+        # 計算當年度教育經費 (讀取每一位子女的獨立年齡)
         edu_expense_this_year = 0
         for child_idx in range(1, int(dependent_children) + 1):
             current_child_age = st.session_state.get(f"child_{child_idx}_age", 0) + i
             if college_start_age <= current_child_age < college_start_age + college_years:
                 edu_expense_this_year += int(annual_college_cost * ((1 + special_inflation) ** i))
 
-        # 檢測重大專案支出
+        # 檢測自訂階段性重大支出 (套用特殊專案通膨率)
         special_expense_this_year = 0
         for j in range(1, 4):
             if st.session_state[f"exp{j}_name"] != "" and st.session_state[f"exp{j}_year"] == i:
                 special_expense_this_year += int(st.session_state[f"exp{j}_amount"] * ((1 + special_inflation) ** i))
             
-        # 資金缺口結算
-        base_shortfall = max(0, current_annual_expense - total_pension_received) if (i > user_years_to_retire or i > spouse_years_to_retire) else 0
+        base_shortfall = max(0, current_annual_expense - total_pension_received) if (user_retired or spouse_retired) else 0
         total_shortfall_needed = base_shortfall + special_expense_this_year + debt_expense_this_year + edu_expense_this_year
         
         if total_shortfall_needed > 0:
@@ -415,21 +409,21 @@ with tab2:
                 if asset_s < 0: asset_s = 0
                     
         total_family_asset = asset_u + asset_s
-        if total_family_asset <= 0 and bankrupt_year is None and (i > user_years_to_retire or i > spouse_years_to_retire or special_expense_this_year > 0 or edu_expense_this_year > 0):
+        if total_family_asset <= 0 and bankrupt_year is None and (user_retired or spouse_retired or special_expense_this_year > 0 or edu_expense_this_year > 0):
             bankrupt_year = year_label
             
         row_data = {
             "觀測年度": year_label,
-            "參與者A資金池": int(asset_u),
+            "參與者A資金結餘": int(asset_u),
             "總流動資產": int(total_family_asset),
-            "抗通膨年金收入": int(total_pension_received),
-            "通膨後基礎支出": int(current_annual_expense) if (i > user_years_to_retire or i > spouse_years_to_retire) else 0,
-            "多名子女教育總額": int(edu_expense_this_year),
+            "年度總月退俸": int(total_pension_received),
+            "通膨後預估支出": int(current_annual_expense) if (user_retired or spouse_retired) else 0,
+            "多名子女教育總支出": int(edu_expense_this_year),
             "重大專案支出": int(special_expense_this_year),
             "貸款攤還流出": int(debt_expense_this_year),
-            "從資產提領總額": int(total_shortfall_needed)
+            "從資產提領金額": int(total_shortfall_needed)
         }
-        if planning_mode == "雙人/家庭": row_data["參與者B資金池"] = int(asset_s)
+        if planning_mode == "雙人/家庭": row_data["參與者B資金結餘"] = int(asset_s)
         sim_rows.append(row_data)
 
     df_sim = pd.DataFrame(sim_rows)
@@ -437,24 +431,29 @@ with tab2:
     if bankrupt_year:
         st.markdown(f"""
         <div class="strategy-box alert-box">
-            <div class="alert-title">🚨 資金枯竭危機 (系統預估於 {bankrupt_year} 年破產)</div>
+            <div class="alert-title">🚨 資金枯竭危機應急指南 (系統預估於 {bankrupt_year} 年破產)</div>
             <div class="strategy-text">
-                系統偵測到現金流缺口將擊穿您的資產護城河。建議調整請領策略（如改為提早/正常請領以獲取穩定現金流底座），或檢視是否需延後退休年份。
+                系統偵測到未來的現金流缺口將吃光所有本金。請考慮採取以下防禦戰術：<br><br>
+                <b>1. 啟動半退休 (咖啡師退休) 模式：</b> 退休後尋找輕鬆的兼職工作（每月只需補足少許現金流），即可巨幅降低指數股票型基金資金池的提領壓力，讓資產起死回生。<br>
+                <b>2. 延後退休臨界點：</b> 將「距離退休尚有幾年」調高 2 至 3 年。多累積 3 年的本金與少提領 3 年的花費，將產生巨大的數學複利差異。<br>
+                <b>3. 債務與固定支出重組：</b> 檢視是否有信貸或未繳清的車貸，在退休前必須清償完畢。同時調降「預估退休後每月總支出」至基礎維生水準。<br>
+                <b>4. 建構醫療險防線：</b> 資金枯竭最常見的致命傷是突發疾病。請確保退休前已具備完善的實支實付醫療險，避免大筆醫藥費一次性擊垮資金池。
             </div>
         </div>
         """, unsafe_allow_html=True)
     
-    st.markdown(f"### 📈 {prefix}資產長期軌跡與請領策略實測")
+    st.markdown(f"### 📈 {prefix}資產長期軌跡")
     fig = go.Figure()
     
     if planning_mode == "雙人/家庭":
-        fig.add_trace(go.Scatter(x=df_sim['觀測年度'], y=df_sim['參與者B資金池'], mode='lines', line=dict(width=0.5, color='#457b9d'), stackgroup='one', name='參與者B資金池'))
+        fig.add_trace(go.Scatter(x=df_sim['觀測年度'], y=df_sim['參與者B資金結餘'], mode='lines', line=dict(width=0.5, color='#457b9d'), stackgroup='one', name='參與者B資金池'))
     
-    fig.add_trace(go.Scatter(x=df_sim['觀測年度'], y=df_sim['參與者A資金池'], mode='lines', line=dict(width=0.5, color='#8CB35A'), stackgroup='one', name='參與者A資金池'))
+    fig.add_trace(go.Scatter(x=df_sim['觀測年度'], y=df_sim['參與者A資金結餘'], mode='lines', line=dict(width=0.5, color='#8CB35A'), stackgroup='one', name='參與者A資金池'))
     
-    if bankrupt_year: fig.add_vline(x=bankrupt_year, line_dash="dot", line_color="#e63946", annotation_text=f"{bankrupt_year}年歸零")
+    if bankrupt_year: fig.add_vline(x=bankrupt_year, line_dash="dot", line_color="#e63946", annotation_text=f"{bankrupt_year}年資產歸零")
         
-    if user_years_to_retire > 0: fig.add_vline(x=current_year + user_years_to_retire, line_dash="dash", line_color="#e9c46a", annotation_text="A原定退休", annotation_position="top left")
+    if user_years_to_retire > 0: fig.add_vline(x=current_year + user_years_to_retire, line_dash="dash", line_color="#e9c46a", annotation_text="參與者A退休", annotation_position="top left")
+    if planning_mode == "雙人/家庭" and spouse_years_to_retire > 0: fig.add_vline(x=current_year + spouse_years_to_retire, line_dash="dash", line_color="#e9c46a", annotation_text="參與者B退休", annotation_position="top left")
 
     fig.update_layout(
         yaxis_title="金融資產結餘 (TWD)", 
@@ -466,7 +465,7 @@ with tab2:
     st.plotly_chart(fig, use_container_width=True)
     
     st.write("")
-    with st.expander("📊 查看完整流水帳 (含抗通膨年金與各項現金流)", expanded=False):
+    with st.expander("📊 查看完整退休流水帳", expanded=False):
         df_formatted = df_sim.copy()
         for col in df_formatted.columns:
             if col != '觀測年度': df_formatted[col] = df_formatted[col].map(lambda x: f"{x:,}")

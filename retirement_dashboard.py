@@ -47,8 +47,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 狀態管理 (Session State) 與資料匯入/匯出設定
+# 2. 記憶體管理與初始化 (Session State)
 # ==========================================
+# 側邊欄：一鍵重置按鈕 (核彈級清除)
+with st.sidebar:
+    if st.button("🔄 清除記憶體並重置設定", use_container_width=True, type="primary"):
+        st.session_state.clear()
+        st.rerun()
+    st.write("")
+
 default_values = {
     "planning_mode": "雙人/家庭",
     "dependent_children": 1,
@@ -80,7 +87,6 @@ default_values = {
     "exp3_name": "", "exp3_year": 0, "exp3_amount": 0,
 }
 
-# 動態預設最多 5 位子女的年齡
 for i in range(1, 6):
     default_values[f"child_{i}_age"] = 10 - (i-1)*2 if (10 - (i-1)*2) > 0 else 0
 
@@ -103,10 +109,14 @@ key_mapping = {
 for i in range(1, 6):
     key_mapping[f"第{i}位子女年齡"] = f"child_{i}_age"
 
+# 初始化尚未存在的變數
 for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
+# ==========================================
+# 3. 介面輸入與動態參數綁定
+# ==========================================
 with st.sidebar:
     st.header("📂 設定檔管理")
     uploaded_file = st.file_uploader("匯入個人設定檔 (CSV)", type="csv")
@@ -140,6 +150,12 @@ with st.sidebar:
     with st.expander(f"👥 扶養與收支現況 (主計處中位數參考)", expanded=False):
         dependent_children = st.number_input("扶養子女數 (人)", value=st.session_state["dependent_children"], min_value=0, max_value=5, step=1)
         st.session_state["dependent_children"] = dependent_children
+        
+        # 局部動態清理機制：自動刪除被縮減的小孩年齡記憶體
+        for i in range(dependent_children + 1, 6):
+            if f"child_{i}_age" in st.session_state:
+                del st.session_state[f"child_{i}_age"]
+                
         dependent_elders = st.number_input("扶養長輩數 (人)", value=st.session_state["dependent_elders"], step=1)
         st.divider()
         annual_income = st.number_input(f"{prefix}年總收入 (元)", value=st.session_state["annual_income"], step=50000)
@@ -159,9 +175,11 @@ with st.sidebar:
             cols = st.columns(min(dependent_children, 3))
             for i in range(dependent_children):
                 col_idx = i % 3
+                # 安全讀取，若被刪除則以預設值重新生成
+                default_age = default_values[f"child_{i+1}_age"]
                 st.session_state[f"child_{i+1}_age"] = cols[col_idx].number_input(
                     f"第 {i+1} 位年齡", 
-                    value=st.session_state.get(f"child_{i+1}_age", 0), 
+                    value=st.session_state.get(f"child_{i+1}_age", default_age), 
                     step=1, 
                     key=f"child_age_input_{i+1}"
                 )
@@ -215,7 +233,7 @@ with st.sidebar:
     )
 
 # ==========================================
-# 3. 核心運算：本金平均攤還演算法與資產推算
+# 4. 核心運算：本金平均攤還演算法與資產推算
 # ==========================================
 def calculate_annual_debt_payment(principal, annual_rate, years, current_year_index):
     """計算本金平均攤還（本金利息一起還）特定年度的總現金流流出"""
@@ -265,7 +283,7 @@ safe_em_months = 6 if planning_mode == "雙人/家庭" else 9
 warn_em_months = 3 if planning_mode == "雙人/家庭" else 6
 
 # ==========================================
-# 4. 主畫面：分頁架構
+# 5. 主畫面：分頁架構
 # ==========================================
 st.title(f"🏦 通用版{prefix}財務戰情中心")
 st.write("")

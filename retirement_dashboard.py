@@ -47,15 +47,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 記憶體管理與初始化 (Session State)
+# 2. 狀態管理 (Session State) 與資料匯入/匯出設定
 # ==========================================
-# 側邊欄：一鍵重置按鈕 (核彈級清除)
-with st.sidebar:
-    if st.button("🔄 清除記憶體並重置設定", use_container_width=True, type="primary"):
-        st.session_state.clear()
-        st.rerun()
-    st.write("")
-
 default_values = {
     "planning_mode": "雙人/家庭",
     "dependent_children": 1,
@@ -87,6 +80,7 @@ default_values = {
     "exp3_name": "", "exp3_year": 0, "exp3_amount": 0,
 }
 
+# 動態預設最多 5 位子女的年齡
 for i in range(1, 6):
     default_values[f"child_{i}_age"] = 10 - (i-1)*2 if (10 - (i-1)*2) > 0 else 0
 
@@ -109,14 +103,10 @@ key_mapping = {
 for i in range(1, 6):
     key_mapping[f"第{i}位子女年齡"] = f"child_{i}_age"
 
-# 初始化尚未存在的變數
 for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# ==========================================
-# 3. 介面輸入與動態參數綁定
-# ==========================================
 with st.sidebar:
     st.header("📂 設定檔管理")
     uploaded_file = st.file_uploader("匯入個人設定檔 (CSV)", type="csv")
@@ -150,12 +140,6 @@ with st.sidebar:
     with st.expander(f"👥 扶養與收支現況 (主計處中位數參考)", expanded=False):
         dependent_children = st.number_input("扶養子女數 (人)", value=st.session_state["dependent_children"], min_value=0, max_value=5, step=1)
         st.session_state["dependent_children"] = dependent_children
-        
-        # 局部動態清理機制：自動刪除被縮減的小孩年齡記憶體
-        for i in range(dependent_children + 1, 6):
-            if f"child_{i}_age" in st.session_state:
-                del st.session_state[f"child_{i}_age"]
-                
         dependent_elders = st.number_input("扶養長輩數 (人)", value=st.session_state["dependent_elders"], step=1)
         st.divider()
         annual_income = st.number_input(f"{prefix}年總收入 (元)", value=st.session_state["annual_income"], step=50000)
@@ -175,11 +159,9 @@ with st.sidebar:
             cols = st.columns(min(dependent_children, 3))
             for i in range(dependent_children):
                 col_idx = i % 3
-                # 安全讀取，若被刪除則以預設值重新生成
-                default_age = default_values[f"child_{i+1}_age"]
                 st.session_state[f"child_{i+1}_age"] = cols[col_idx].number_input(
                     f"第 {i+1} 位年齡", 
-                    value=st.session_state.get(f"child_{i+1}_age", default_age), 
+                    value=st.session_state.get(f"child_{i+1}_age", 0), 
                     step=1, 
                     key=f"child_age_input_{i+1}"
                 )
@@ -233,7 +215,7 @@ with st.sidebar:
     )
 
 # ==========================================
-# 4. 核心運算：本金平均攤還演算法與資產推算
+# 3. 核心運算：動態現金流與資產壓力測試引擎
 # ==========================================
 def calculate_annual_debt_payment(principal, annual_rate, years, current_year_index):
     """計算本金平均攤還（本金利息一起還）特定年度的總現金流流出"""
@@ -267,23 +249,116 @@ debt_ratio = (loan_principal / total_assets_value) * 100 if total_assets_value >
 current_passive_income = (total_financial_assets * expected_return) / 12
 pre_retire_fi_rate = (current_passive_income / monthly_expense_now) * 100 if monthly_expense_now > 0 else 0
 
-future_asset_u = user_principal
-for _ in range(user_years_to_retire): future_asset_u = future_asset_u * (1 + expected_return) + user_annual_contribution
+safe_em_months = 6 if planning_mode == "雙人/家庭" else 9
+warn_em_months = 3 if planning_mode == "雙人/家庭" else 6
 
-future_asset_s = spouse_principal if planning_mode == "雙人/家庭" else 0
-if planning_mode == "雙人/家庭":
-    for _ in range(spouse_years_to_retire): future_asset_s = future_asset_s * (1 + expected_return) + spouse_annual_contribution
+# ----------------------------------------------------
+# 執行 50 年長期壓力測試，確保第一與第二階段數據完美同步
+# ----------------------------------------------------
+current_year = datetime.date.today().year
+asset_u, asset_s = user_principal, spouse_principal
+current_annual_expense = post_retire_expense * 12
+sim_rows = []
+bankrupt_year = None
 
-total_future_assets = future_asset_u + future_asset_s
+for i in range(1, 51):
+    year_label = current_year + i
+    user_retired = i > user_years_to_retire
+    spouse_retired = (i > spouse_years_to_retire) if planning_mode == "雙人/家庭" else False
+    
+    inv_income_u = int(asset_u * expected_return) if asset_u > 0 else 0
+    inv_income_s = int(asset_s * expected_return) if asset_s > 0 else 0
+    
+    cont_u = user_annual_contribution if not user_retired else 0
+    cont_s = spouse_annual_contribution if not spouse_retired else 0
+    
+    pension_u = user_monthly_pension * 12 if user_retired else 0
+    pension_s = spouse_monthly_pension * 12 if (spouse_retired and planning_mode == "雙人/家庭") else 0
+    total_pension_received = pension_u + pension_s
+    
+    # 貸款支出 (本金平均攤還)
+    debt_expense_this_year = calculate_annual_debt_payment(loan_principal, loan_interest_rate, loan_years_remaining, i-1)
+
+    if i > 1: current_annual_expense = int(current_annual_expense * (1 + basic_inflation))
+        
+    # 計算當年度教育經費 (讀取每一位子女的獨立年齡)
+    edu_expense_this_year = 0
+    for child_idx in range(1, int(dependent_children) + 1):
+        current_child_age = st.session_state.get(f"child_{child_idx}_age", 0) + i
+        if college_start_age <= current_child_age < college_start_age + college_years:
+            edu_expense_this_year += int(annual_college_cost * ((1 + special_inflation) ** i))
+
+    # 檢測自訂階段性重大支出 (套用特殊專案通膨率)
+    special_expense_this_year = 0
+    for j in range(1, 4):
+        if st.session_state[f"exp{j}_name"] != "" and st.session_state[f"exp{j}_year"] == i:
+            special_expense_this_year += int(st.session_state[f"exp{j}_amount"] * ((1 + special_inflation) ** i))
+        
+    # 【核心修正】：退休前，房貸由薪水支付；退休後主動收入中斷，才由資產池承擔。
+    is_retired_phase = user_retired or spouse_retired
+    active_debt_expense = debt_expense_this_year if is_retired_phase else 0
+    base_shortfall = max(0, current_annual_expense - total_pension_received) if is_retired_phase else 0
+    
+    total_shortfall_needed = base_shortfall + special_expense_this_year + active_debt_expense + edu_expense_this_year
+    
+    if total_shortfall_needed > 0:
+        if cont_u >= total_shortfall_needed:
+            cont_u -= total_shortfall_needed
+            total_shortfall_needed = 0
+        elif (cont_u + cont_s) >= total_shortfall_needed:
+            total_shortfall_needed -= cont_u
+            cont_u = 0
+            cont_s -= total_shortfall_needed
+            total_shortfall_needed = 0
+        else:
+            total_shortfall_needed -= (cont_u + cont_s)
+            cont_u = 0
+            cont_s = 0
+            
+    actual_withdrawal = total_shortfall_needed
+    
+    asset_u = asset_u + inv_income_u + cont_u
+    asset_s = asset_s + inv_income_s + cont_s
+    
+    if actual_withdrawal > 0:
+        if asset_u >= actual_withdrawal: asset_u -= actual_withdrawal
+        else:
+            actual_withdrawal -= asset_u; asset_u = 0; asset_s -= actual_withdrawal
+            if asset_s < 0: asset_s = 0
+                
+    total_family_asset = asset_u + asset_s
+    if total_family_asset <= 0 and bankrupt_year is None and (is_retired_phase or special_expense_this_year > 0 or edu_expense_this_year > 0):
+        bankrupt_year = year_label
+        
+    row_data = {
+        "觀測年度": year_label,
+        "參與者A資金結餘": int(asset_u),
+        "總流動資產": int(total_family_asset),
+        "年度總月退俸": int(total_pension_received),
+        "通膨後預估支出": int(current_annual_expense) if is_retired_phase else 0,
+        "多名子女教育總支出": int(edu_expense_this_year),
+        "重大專案支出": int(special_expense_this_year),
+        "貸款攤還流出": int(active_debt_expense),
+        "從資產提領金額": int(total_shortfall_needed)
+    }
+    if planning_mode == "雙人/家庭": row_data["參與者B資金結餘"] = int(asset_s)
+    sim_rows.append(row_data)
+
+df_sim = pd.DataFrame(sim_rows)
+
+# 取出邁入主退休年份的那一年資產水位，回傳給第一階段使用 (確保兩階段同步)
+retire_target_year = current_year + user_years_to_retire
+if user_years_to_retire > 0 and retire_target_year <= current_year + 50:
+    total_future_assets = df_sim[df_sim['觀測年度'] == retire_target_year]['總流動資產'].values[0]
+else:
+    total_future_assets = total_financial_assets
+
 total_future_pension = user_monthly_pension + spouse_monthly_pension
 future_passive_income = (total_future_assets * expected_return) / 12
 post_retire_fi_rate = ((total_future_pension + future_passive_income) / post_retire_expense) * 100 if post_retire_expense > 0 else 0
 
-safe_em_months = 6 if planning_mode == "雙人/家庭" else 9
-warn_em_months = 3 if planning_mode == "雙人/家庭" else 6
-
 # ==========================================
-# 5. 主畫面：分頁架構
+# 4. 主畫面：分頁架構
 # ==========================================
 st.title(f"🏦 通用版{prefix}財務戰情中心")
 st.write("")
@@ -337,96 +412,10 @@ with tab1:
     """, unsafe_allow_html=True)
 
 # ------------------------------------------
-# Tab 2: 長期退休資產壓力測試
+# Tab 2: 長期退休資產壓力測試 (純渲染圖表)
 # ------------------------------------------
 with tab2:
     st.write("")
-    current_year = datetime.date.today().year
-    asset_u, asset_s = user_principal, spouse_principal
-    current_annual_expense = post_retire_expense * 12
-    sim_rows = []
-    bankrupt_year = None
-    
-    for i in range(1, 51):
-        year_label = current_year + i
-        user_retired = i > user_years_to_retire
-        spouse_retired = (i > spouse_years_to_retire) if planning_mode == "雙人/家庭" else False
-        
-        inv_income_u = int(asset_u * expected_return) if asset_u > 0 else 0
-        inv_income_s = int(asset_s * expected_return) if asset_s > 0 else 0
-        
-        cont_u = user_annual_contribution if not user_retired else 0
-        cont_s = spouse_annual_contribution if not spouse_retired else 0
-        
-        pension_u = user_monthly_pension * 12 if user_retired else 0
-        pension_s = spouse_monthly_pension * 12 if (spouse_retired and planning_mode == "雙人/家庭") else 0
-        total_pension_received = pension_u + pension_s
-        
-        # 貸款支出 (本金平均攤還)
-        debt_expense_this_year = calculate_annual_debt_payment(loan_principal, loan_interest_rate, loan_years_remaining, i-1)
-
-        if i > 1: current_annual_expense = int(current_annual_expense * (1 + basic_inflation))
-            
-        # 計算當年度教育經費 (讀取每一位子女的獨立年齡)
-        edu_expense_this_year = 0
-        for child_idx in range(1, int(dependent_children) + 1):
-            current_child_age = st.session_state.get(f"child_{child_idx}_age", 0) + i
-            if college_start_age <= current_child_age < college_start_age + college_years:
-                edu_expense_this_year += int(annual_college_cost * ((1 + special_inflation) ** i))
-
-        # 檢測自訂階段性重大支出 (套用特殊專案通膨率)
-        special_expense_this_year = 0
-        for j in range(1, 4):
-            if st.session_state[f"exp{j}_name"] != "" and st.session_state[f"exp{j}_year"] == i:
-                special_expense_this_year += int(st.session_state[f"exp{j}_amount"] * ((1 + special_inflation) ** i))
-            
-        base_shortfall = max(0, current_annual_expense - total_pension_received) if (user_retired or spouse_retired) else 0
-        total_shortfall_needed = base_shortfall + special_expense_this_year + debt_expense_this_year + edu_expense_this_year
-        
-        if total_shortfall_needed > 0:
-            if cont_u >= total_shortfall_needed:
-                cont_u -= total_shortfall_needed
-                total_shortfall_needed = 0
-            elif (cont_u + cont_s) >= total_shortfall_needed:
-                total_shortfall_needed -= cont_u
-                cont_u = 0
-                cont_s -= total_shortfall_needed
-                total_shortfall_needed = 0
-            else:
-                total_shortfall_needed -= (cont_u + cont_s)
-                cont_u = 0
-                cont_s = 0
-                
-        actual_withdrawal = total_shortfall_needed
-        
-        asset_u = asset_u + inv_income_u + cont_u
-        asset_s = asset_s + inv_income_s + cont_s
-        
-        if actual_withdrawal > 0:
-            if asset_u >= actual_withdrawal: asset_u -= actual_withdrawal
-            else:
-                actual_withdrawal -= asset_u; asset_u = 0; asset_s -= actual_withdrawal
-                if asset_s < 0: asset_s = 0
-                    
-        total_family_asset = asset_u + asset_s
-        if total_family_asset <= 0 and bankrupt_year is None and (user_retired or spouse_retired or special_expense_this_year > 0 or edu_expense_this_year > 0):
-            bankrupt_year = year_label
-            
-        row_data = {
-            "觀測年度": year_label,
-            "參與者A資金結餘": int(asset_u),
-            "總流動資產": int(total_family_asset),
-            "年度總月退俸": int(total_pension_received),
-            "通膨後預估支出": int(current_annual_expense) if (user_retired or spouse_retired) else 0,
-            "多名子女教育總支出": int(edu_expense_this_year),
-            "重大專案支出": int(special_expense_this_year),
-            "貸款攤還流出": int(debt_expense_this_year),
-            "從資產提領金額": int(total_shortfall_needed)
-        }
-        if planning_mode == "雙人/家庭": row_data["參與者B資金結餘"] = int(asset_s)
-        sim_rows.append(row_data)
-
-    df_sim = pd.DataFrame(sim_rows)
     
     if bankrupt_year:
         st.markdown(f"""

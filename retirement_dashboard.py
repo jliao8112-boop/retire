@@ -108,6 +108,7 @@ key_mapping = {
 for i in range(1, 6):
     key_mapping[f"第{i}位子女年齡"] = f"child_{i}_age"
 
+# 若資料庫無該數值，則先寫入預設值
 for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
@@ -139,7 +140,7 @@ with st.sidebar:
     st.header("⚙️ 財務參數輸入")
     
     st.radio("選擇財務規劃模式", ["雙人/家庭", "單人"], horizontal=True, key="planning_mode")
-    prefix = "家庭" if st.session_state.planning_mode == "雙人/家庭" else "個人"
+    prefix = "家庭" if st.session_state.get("planning_mode", "雙人/家庭") == "雙人/家庭" else "個人"
     st.write("")
 
     with st.expander(f"👥 扶養與收支現況", expanded=False):
@@ -158,10 +159,11 @@ with st.sidebar:
         st.number_input("剩餘攤還年限 (年)", step=1, key="loan_years_remaining")
 
     with st.expander("🎓 子女高等教育經費", expanded=True):
-        if st.session_state.dependent_children > 0:
+        dep_child = st.session_state.get("dependent_children", 1)
+        if dep_child > 0:
             st.caption("請輸入每一位子女的目前年齡：")
-            cols = st.columns(min(st.session_state.dependent_children, 3))
-            for i in range(st.session_state.dependent_children):
+            cols = st.columns(min(dep_child, 3))
+            for i in range(dep_child):
                 col_idx = i % 3
                 cols[col_idx].number_input(f"第 {i+1} 位年齡", step=1, key=f"child_{i+1}_age")
             st.divider()
@@ -187,12 +189,12 @@ with st.sidebar:
         
         st.divider()
         st.selectbox("法定退休金請領策略", ["正常請領", "提早 5 年 (-20%)", "延後 5 年 (+20%)", "一次請領"], key="user_pension_strategy")
-        if st.session_state.user_pension_strategy == "一次請領":
+        if st.session_state.get("user_pension_strategy", "正常請領") == "一次請領":
             st.number_input("預估一次請領總額 (元)", step=100000, key="user_lump_sum")
         else:
             st.number_input("預估基準月退俸 (元)", step=5000, key="user_monthly_pension")
 
-    if st.session_state.planning_mode == "雙人/家庭":
+    if st.session_state.get("planning_mode", "雙人/家庭") == "雙人/家庭":
         with st.expander("👩 參與者 B：法定年金與資產模擬", expanded=True):
             st.number_input("參與者B_初始本金 (元)", step=50000, key="spouse_principal")
             st.number_input("參與者B_每年投入金額 (元)", step=10000, key="spouse_annual_contribution")
@@ -200,7 +202,7 @@ with st.sidebar:
             
             st.divider()
             st.selectbox("參與者B_法定退休金請領策略", ["正常請領", "提早 5 年 (-20%)", "延後 5 年 (+20%)", "一次請領"], key="spouse_pension_strategy")
-            if st.session_state.spouse_pension_strategy == "一次請領":
+            if st.session_state.get("spouse_pension_strategy", "正常請領") == "一次請領":
                 st.number_input("參與者B_預估一次請領總額 (元)", step=100000, key="spouse_lump_sum")
             else:
                 st.number_input("參與者B_預估基準月退俸 (元)", step=5000, key="spouse_monthly_pension")
@@ -220,36 +222,43 @@ with st.sidebar:
     )
 
 # ==========================================
-# 4. 核心運算：後台狀態提取與雙階段引擎
+# 4. 核心運算：後台狀態全面安全提取 (防崩潰機制)
 # ==========================================
-# 提取基礎變數，避免切換模式時遺失數據
-annual_income = st.session_state.annual_income
-annual_expense = st.session_state.annual_expense
-cash_assets = st.session_state.cash_assets
-real_estate_value = st.session_state.real_estate_value
-loan_principal = st.session_state.loan_principal
-loan_interest_rate = st.session_state.loan_interest_rate
-loan_years_remaining = st.session_state.loan_years_remaining
-dependent_children = st.session_state.dependent_children
+# 透過 .get() 防禦 Streamlit 的元件銷毀機制
+annual_income = st.session_state.get("annual_income", 1100000)
+annual_expense = st.session_state.get("annual_expense", 850000)
+cash_assets = st.session_state.get("cash_assets", 500000)
+real_estate_value = st.session_state.get("real_estate_value", 10000000)
+loan_principal = st.session_state.get("loan_principal", 5000000)
+loan_interest_rate = st.session_state.get("loan_interest_rate", 2.1)
+loan_years_remaining = st.session_state.get("loan_years_remaining", 20)
+dependent_children = st.session_state.get("dependent_children", 1)
 
-college_start_age = st.session_state.college_start_age
-college_years = st.session_state.college_years
-annual_college_cost = st.session_state.annual_college_cost
+college_start_age = st.session_state.get("college_start_age", 18)
+college_years = st.session_state.get("college_years", 4)
+annual_college_cost = st.session_state.get("annual_college_cost", 250000)
 
-user_principal = st.session_state.user_principal
-user_annual_contribution = st.session_state.user_annual_contribution
-user_years_to_retire = st.session_state.user_years_to_retire
+user_principal = st.session_state.get("user_principal", 1500000)
+user_annual_contribution = st.session_state.get("user_annual_contribution", 150000)
+user_years_to_retire = st.session_state.get("user_years_to_retire", 15)
 
-# 單人模式下強勢覆蓋配偶參數為 0
-is_double = (st.session_state.planning_mode == "雙人/家庭")
-spouse_principal = st.session_state.spouse_principal if is_double else 0
-spouse_annual_contribution = st.session_state.spouse_annual_contribution if is_double else 0
-spouse_years_to_retire = st.session_state.spouse_years_to_retire if is_double else 0
+user_pension_strategy = st.session_state.get("user_pension_strategy", "正常請領")
+user_monthly_pension = st.session_state.get("user_monthly_pension", 25000)
+user_lump_sum = st.session_state.get("user_lump_sum", 2000000)
 
-expected_return = st.session_state.expected_return_pct / 100
-post_retire_expense = st.session_state.post_retire_expense
-basic_inflation = st.session_state.basic_inflation_pct / 100
-special_inflation = st.session_state.special_inflation_pct / 100
+# 單人模式下強勢覆蓋配偶參數為 0，且即使元件隱藏也能安全讀取
+is_double = (st.session_state.get("planning_mode", "雙人/家庭") == "雙人/家庭")
+spouse_principal = st.session_state.get("spouse_principal", 1000000) if is_double else 0
+spouse_annual_contribution = st.session_state.get("spouse_annual_contribution", 100000) if is_double else 0
+spouse_years_to_retire = st.session_state.get("spouse_years_to_retire", 15) if is_double else 0
+spouse_pension_strategy = st.session_state.get("spouse_pension_strategy", "正常請領")
+spouse_monthly_pension = st.session_state.get("spouse_monthly_pension", 25000)
+spouse_lump_sum = st.session_state.get("spouse_lump_sum", 2000000)
+
+expected_return = st.session_state.get("expected_return_pct", 6.0) / 100
+post_retire_expense = st.session_state.get("post_retire_expense", 60000)
+basic_inflation = st.session_state.get("basic_inflation_pct", 2.0) / 100
+special_inflation = st.session_state.get("special_inflation_pct", 3.5) / 100
 
 def calculate_annual_debt_payment(principal, annual_rate, years, current_year_index):
     if years <= 0 or principal <= 0 or current_year_index >= years:
@@ -288,23 +297,23 @@ sim_rows = []
 bankrupt_year = None
 
 u_retire_trigger = user_years_to_retire
-u_base_pension = st.session_state.user_monthly_pension
-if st.session_state.user_pension_strategy == "提早 5 年 (-20%)":
+u_base_pension = user_monthly_pension
+if user_pension_strategy == "提早 5 年 (-20%)":
     u_retire_trigger = max(0, user_years_to_retire - 5)
-    u_base_pension = st.session_state.user_monthly_pension * 0.8
-elif st.session_state.user_pension_strategy == "延後 5 年 (+20%)":
+    u_base_pension = user_monthly_pension * 0.8
+elif user_pension_strategy == "延後 5 年 (+20%)":
     u_retire_trigger = user_years_to_retire + 5
-    u_base_pension = st.session_state.user_monthly_pension * 1.2
+    u_base_pension = user_monthly_pension * 1.2
 
 s_retire_trigger = spouse_years_to_retire
-s_base_pension = st.session_state.spouse_monthly_pension
+s_base_pension = spouse_monthly_pension
 if is_double:
-    if st.session_state.spouse_pension_strategy == "提早 5 年 (-20%)":
+    if spouse_pension_strategy == "提早 5 年 (-20%)":
         s_retire_trigger = max(0, spouse_years_to_retire - 5)
-        s_base_pension = st.session_state.spouse_monthly_pension * 0.8
-    elif st.session_state.spouse_pension_strategy == "延後 5 年 (+20%)":
+        s_base_pension = spouse_monthly_pension * 0.8
+    elif spouse_pension_strategy == "延後 5 年 (+20%)":
         s_retire_trigger = spouse_years_to_retire + 5
-        s_base_pension = st.session_state.spouse_monthly_pension * 1.2
+        s_base_pension = spouse_monthly_pension * 1.2
 
 for i in range(1, 51):
     year_label = current_year + i
@@ -319,18 +328,18 @@ for i in range(1, 51):
     cont_s = spouse_annual_contribution if not spouse_retired else 0
     
     # 執行一次請領資金匯入
-    if st.session_state.user_pension_strategy == "一次請領" and i == user_years_to_retire:
-        asset_u += st.session_state.user_lump_sum
-    if is_double and st.session_state.spouse_pension_strategy == "一次請領" and i == spouse_years_to_retire:
-        asset_s += st.session_state.spouse_lump_sum
+    if user_pension_strategy == "一次請領" and i == user_years_to_retire:
+        asset_u += user_lump_sum
+    if is_double and spouse_pension_strategy == "一次請領" and i == spouse_years_to_retire:
+        asset_s += spouse_lump_sum
         
     pension_u = 0
-    if u_is_receiving and st.session_state.user_pension_strategy != "一次請領":
+    if u_is_receiving and user_pension_strategy != "一次請領":
         years_receiving_u = i - u_retire_trigger
         pension_u = int(u_base_pension * 12 * ((1 + basic_inflation) ** years_receiving_u))
         
     pension_s = 0
-    if s_is_receiving and st.session_state.spouse_pension_strategy != "一次請領" and is_double:
+    if s_is_receiving and spouse_pension_strategy != "一次請領" and is_double:
         years_receiving_s = i - s_retire_trigger
         pension_s = int(s_base_pension * 12 * ((1 + basic_inflation) ** years_receiving_s))
         
@@ -346,8 +355,8 @@ for i in range(1, 51):
 
     special_expense_this_year = 0
     for j in range(1, 4):
-        if st.session_state[f"exp{j}_name"] != "" and st.session_state[f"exp{j}_year"] == i:
-            special_expense_this_year += int(st.session_state[f"exp{j}_amount"] * ((1 + special_inflation) ** i))
+        if st.session_state.get(f"exp{j}_name", "") != "" and st.session_state.get(f"exp{j}_year", 0) == i:
+            special_expense_this_year += int(st.session_state.get(f"exp{j}_amount", 0) * ((1 + special_inflation) ** i))
         
     # 房貸雙重扣除修正：一旦進入退休階段，停止主動薪水扣除，轉由資產池負責承擔
     is_retired_phase = user_retired or spouse_retired
@@ -407,7 +416,7 @@ if user_years_to_retire > 0 and retire_target_year <= current_year + 50:
 else:
     total_future_assets = total_financial_assets
 
-total_future_pension = st.session_state.user_monthly_pension + st.session_state.spouse_monthly_pension
+total_future_pension = (user_monthly_pension if user_pension_strategy != "一次請領" else 0) + (spouse_monthly_pension if is_double and spouse_pension_strategy != "一次請領" else 0)
 future_passive_income = (total_future_assets * expected_return) / 12
 post_retire_fi_rate = ((total_future_pension + future_passive_income) / post_retire_expense) * 100 if post_retire_expense > 0 else 0
 
